@@ -1,0 +1,17 @@
+{
+  "name": "spectastic",
+  "collaborators": [
+    "jonathanhardie <jonathan@jonathanhardie.com>"
+  ],
+  "version": "0.1.0",
+  "files": [
+    "spectastic_bg.wasm",
+    "spectastic.js",
+    "spectastic.d.ts"
+  ],
+  "module": "spectastic.js",
+  "types": "spectastic.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
