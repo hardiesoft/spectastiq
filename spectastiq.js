@@ -60,7 +60,7 @@ class Spectastiq extends HTMLElement {
 
     const loadingSpinner = document.createElement("div");
     loadingSpinner.setAttribute("class", "lds-ring");
-    loadingSpinner.style.top = `calc(${canvas.height * 0.5}px - 40px)`;
+    loadingSpinner.style.top = `calc(${canvas.height * 0.5}px - 20px)`;
     for (let i = 0; i < 4; i++) {
       const item = document.createElement("div");
       loadingSpinner.append(item);
