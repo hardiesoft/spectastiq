@@ -3,10 +3,7 @@ import {colourMap} from "./colormaps.js";
 import {positionHandles} from "./timeline-wrapper.js";
 
 const FFT_WIDTH = 2048;
-const audioContext = new OfflineAudioContext({
-  length: 1024*1024,
-  sampleRate: 48000,
-});
+
 // const canvas = document.getElementById("canvas");
 // canvas.width = window.innerWidth;
 // const WIDTH = canvas.width;
@@ -22,7 +19,7 @@ async function initWorkers() {
 
   // TODO: Share wasm module among workers rather than initing/downloading it for each?
 
-  const mod = await spectastiq.default("./pkg/spectastic_bg.wasm");
+  const _mod = await spectastiq.default("./pkg/spectastic_bg.wasm");
   //console.log(mod);
   spectastiq.init_logger();
   const initWorkers = [];
@@ -34,334 +31,117 @@ async function initWorkers() {
   await Promise.all(initWorkers);
 }
 
-let playing = false;
-let audioBytes = null;
-let audioProgressZeroOne = 0;
-let progressSampleTime = 0;
-let audioDuration = 0;
-let audioStatusPoll;
-let playheadWasInRangeWhenPlaybackStarted = false;
-const updatePlayhead = (ctx, miniMapCtx, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber, beganPlaying = false) => {
-  const now = performance.now();
-  const timeSinceSamplingSeconds = (now - progressSampleTime) / 1000;
-  const progress = audioProgressZeroOne + (timeSinceSamplingSeconds / audioDuration);
-  positionPlayhead(progress, playheadScrubber);
-  {
-    const width = playheadCanvasCtx.canvas.width;
-    const height = playheadCanvasCtx.canvas.height;
-    playheadCanvasCtx.clearRect(0, 0, width, height);
-    playheadCanvasCtx.fillStyle = "white";
-    const left = (progress * width) - (devicePixelRatio);
-    playheadCanvasCtx.fillRect(left, 0, 2 * devicePixelRatio, height);
-  }
-  {
-    const width = mainPlayheadCanvasCtx.canvas.width;
-    const height = mainPlayheadCanvasCtx.canvas.height;
-    mainPlayheadCanvasCtx.clearRect(0, 0, width, height);
-    mainPlayheadCanvasCtx.fillStyle = "white";
-    const playheadInRange = progress >= prevLeft && progress <= prevRight;
-    if (playheadInRange) {
-      const range = prevRight - prevLeft;
-      const pro = (progress - prevLeft) / range;
-      const left = (pro * width) - (devicePixelRatio);
-      mainPlayheadCanvasCtx.fillRect(left, 0, 2 * devicePixelRatio, height);
-      // NOTE: Advance range if playhead was inside range when playback started.
+// let playing = false;
+// let audioBytes = null;
+// let audioProgressZeroOne = 0;
+// let progressSampleTime = 0;
+// let audioDuration = 0;
+// let audioStatusPoll;
+// let playheadWasInRangeWhenPlaybackStarted = false;
 
-      const pBounds = mainPlayheadScrubber.parentElement.parentElement.getBoundingClientRect();
-      mainPlayheadScrubber.parentElement.style.display = `block`;
-      mainPlayheadScrubber.parentElement.style.transform = `translateX(${pro * pBounds.width}px)`;
-    } else {
-      mainPlayheadScrubber.parentElement.style.display = `none`;
+
+
+const getAudioObject = (fileBytes) => {
+  const audioBytes = new ArrayBuffer(fileBytes.byteLength);
+  new Uint8Array(audioBytes).set(new Uint8Array(fileBytes));
+  return URL.createObjectURL(new Blob([audioBytes], { type: "audio/wav" }));
+};
+export const initSpectrogram = async (filePath) => {
+  const state = {
+    floatData: undefined,
+    sharedFloatData: undefined,
+    sharedOutputData,
+    prevLeft: undefined,
+    prevRight: undefined,
+    max: undefined,
+    imageDatas: [],
+    canvasWidth: 0,
+    pendingRender: {
+      complete: true,
     }
-    if (beganPlaying) {
-      playheadWasInRangeWhenPlaybackStarted = playheadInRange;
-    }
-    if (!playheadInRange && playheadWasInRangeWhenPlaybackStarted) {
-      const range = prevRight - prevLeft;
-      prevRight = Math.min(1, prevRight + range);
-      prevLeft = prevRight - range;
-      // FIXME - Only update the range if the user isn't scrubbing/interacting with the timeline.
-      renderRange(ctx, miniMapCtx, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber, prevLeft, prevRight, false).then(() => positionHandles(prevLeft, prevRight));
-    }
-  }
-  if (playing) {
-    audioStatusPoll = requestAnimationFrame(() => {
-      updatePlayhead(ctx, miniMapCtx, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber);
-    });
-  }
-};
+  };
 
-const togglePlayback = (button, ctx, miniMapCtx, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber, audio) => {
-  // TODO: Handle events for seeked, seeking
-  // Check seekable for timeranges that can bee seeked.  If we decoded the full wav, presumably we can seek anywhere.
-  if (audioBytes) {
-    if (!playing) {
-      playAudio(audio, ctx, miniMapCtx, button, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber);
-    } else {
-      pauseAudio(audio, button);
-    }
-  } else {
-    console.warn("Audio not loaded");
-  }
-};
-
-let wavData;
-let floatData;
-let sharedFloatData;
-
-
-let capturedElement;
-let dragPlayheadRaf;
-let playheadStartOffsetXZeroOne;
-let playheadDragOffsetX;
-let mainPlayheadStartOffsetXZeroOne;
-let mainPlayheadDragOffsetX;
-let wasPlaying = false;
-const startPlayheadDrag = (e, playheadScrubber, playToggle, audio) => {
-  if (e.isPrimary && !capturedElement) {
-    playheadScrubber.setPointerCapture(e.pointerId);
-    wasPlaying = playing;
-    if (playing) {
-      pauseAudio(audio, playToggle);
-    }
-    capturedElement = playheadScrubber;
-    const pBounds = playheadScrubber.parentElement.getBoundingClientRect();
-    const hBounds = playheadScrubber.getBoundingClientRect();
-    playheadStartOffsetXZeroOne = (hBounds.left - pBounds.left) / pBounds.width;
-    playheadDragOffsetX = (e.clientX - pBounds.left) / pBounds.width;
-    //handleGrabXZeroOne = e.offsetX / hBounds.width;
-  }
-};
-
-const startMainPlayheadDrag = (e, mainPlayheadScrubber, playToggle, audio) => {
-  if (e.isPrimary && !capturedElement) {
-    mainPlayheadScrubber.setPointerCapture(e.pointerId);
-    mainPlayheadScrubber.classList.add("grabbing");
-    wasPlaying = playing;
-    if (playing) {
-      pauseAudio(audio, playToggle);
-    }
-    capturedElement = mainPlayheadScrubber;
-    const pBounds = mainPlayheadScrubber.parentElement.parentElement.getBoundingClientRect();
-    const hBounds = mainPlayheadScrubber.getBoundingClientRect();
-    mainPlayheadStartOffsetXZeroOne = prevLeft + (hBounds.left - pBounds.left) / pBounds.width;
-    mainPlayheadDragOffsetX = (e.clientX - hBounds.left) / hBounds.width;
-  }
-};
-
-const endPlayheadDrag = (e, ctx, miniMapCtx, playheadScrubber, playheadCanvasCtx, mainPlayheadCanvasCtx, mainPlayheadScrubber, playToggle, audio) => {
-  if (e.isPrimary) {
-    playheadScrubber.releasePointerCapture(e.pointerId);
-    if (wasPlaying) {
-      playAudio(audio, ctx, miniMapCtx, playToggle, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber);
-    }
-    capturedElement = null;
-  }
-};
-
-const endMainPlayheadDrag = (e, ctx, miniMapCtx, playheadScrubber, playheadCanvasCtx, mainPlayheadCanvasCtx, mainPlayheadScrubber, playToggle, audio) => {
-  if (e.isPrimary) {
-    mainPlayheadScrubber.releasePointerCapture(e.pointerId);
-    mainPlayheadScrubber.classList.remove("grabbing");
-    if (wasPlaying) {
-      playAudio(audio, ctx, miniMapCtx, playToggle, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber);
-    }
-    capturedElement = null;
-  }
-};
-
-const playAudio = (audio, ctx, miniMapCtx, playToggle, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber) => {
-  playing = true;
-  audio.play();
-  progressSampleTime = performance.now();
-  playToggle.classList.remove("paused");
-  updatePlayhead(ctx, miniMapCtx, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber, true);
-};
-const pauseAudio = (audio, playToggle) => {
-  cancelAnimationFrame(audioStatusPoll);
-  playing = false;
-  audio.pause();
-  playToggle.classList.add("paused");
-};
-
-const dragPlayhead = (e, ctx, miniMapCtx, playheadScrubber, playheadCanvasCtx, mainPlayheadCanvasCtx, mainPlayheadScrubber, audio) => {
-  if (e.isPrimary && e.target.hasPointerCapture(e.pointerId) && capturedElement === playheadScrubber) {
-    const pBounds = playheadScrubber.parentElement.parentElement.getBoundingClientRect();
-
-    const thisOffsetXZeroOne = Math.max(0, Math.min((e.clientX - pBounds.left) / pBounds.width, 1));
-    cancelAnimationFrame(dragPlayheadRaf);
-    dragPlayheadRaf = requestAnimationFrame(async () => {
-      audioProgressZeroOne = thisOffsetXZeroOne;
-      progressSampleTime = performance.now();
-      updatePlayhead(ctx, miniMapCtx, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber);
-      if (audio.duration) {
-        audio.currentTime = thisOffsetXZeroOne * audio.duration;
-      }
-    });
-  }
-};
-
-const dragMainPlayhead = (e, ctx, miniMapCtx, playheadScrubber, playheadCanvasCtx, mainPlayheadCanvasCtx, mainPlayheadScrubber, audio) => {
-  if (e.isPrimary && e.target.hasPointerCapture(e.pointerId) && capturedElement === mainPlayheadScrubber) {
-    const pBounds = mainPlayheadScrubber.parentElement.parentElement.getBoundingClientRect();
-    const range = prevRight - prevLeft;
-    const thisOffsetXZeroOne = Math.min(prevRight, prevLeft + Math.max(0, Math.min(range * ((e.clientX - pBounds.left) / pBounds.width), 1)));
-    cancelAnimationFrame(dragPlayheadRaf);
-    dragPlayheadRaf = requestAnimationFrame(async () => {
-      audioProgressZeroOne = thisOffsetXZeroOne;
-      progressSampleTime = performance.now();
-      updatePlayhead(ctx, miniMapCtx, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber);
-      if (audio.duration) {
-        audio.currentTime = thisOffsetXZeroOne * audio.duration;
-      }
-    });
-  }
-};
-
-const positionPlayhead = (progressZeroOne, playheadScrubber) => {
-  const pBounds = playheadScrubber.parentElement.parentElement.getBoundingClientRect();
-  playheadScrubber.parentElement.style.transform = `translateX(${progressZeroOne * pBounds.width}px)`;
-};
-
-const initAudio = async (audio, playToggle) => {
-  return new Promise((resolve, reject) => {
-    if (audioBytes) {
-      if (!audio.src) {
-        audio.src = URL.createObjectURL(new Blob([audioBytes], { type: "audio/wav" }));
-
-        // TODO: window.URL.revokeObjectURL(url); When unloading
-        audio.addEventListener("loadeddata", () => {
-          audioDuration = audio.duration;
-          resolve();
-          // const ranges = audio.seekable;
-          // console.log(ranges.start(0), ranges.end(0));
-          //console.log(duration);
-          // The duration variable now holds the duration (in seconds) of the audio clip
-        });
-        // audio.addEventListener("loadedmetadata", () => {
-        //   let duration = audio.duration;
-        //   console.log(duration);
-        //   // The duration variable now holds the duration (in seconds) of the audio clip
-        // });
-        audio.addEventListener("timeupdate", () => {
-          audioProgressZeroOne = audio.currentTime / audio.duration;
-          progressSampleTime = performance.now();
-          //renderAudioPlayhead(audioProgressZeroOne);
-          // The duration variable now holds the duration (in seconds) of the audio clip
-        });
-        audio.addEventListener("ended", () => {
-          playing = false;
-          pauseAudio(audio, playToggle);
-          // The duration variable now holds the duration (in seconds) of the audio clip
-        });
-      }
-      if (audio.currentTime !== undefined && audio.duration !== undefined) {
-        audioProgressZeroOne = audio.currentTime / audio.duration;
-        progressSampleTime = performance.now();
-      }
-    } else {
-      reject();
-      console.warn("Audio not loaded");
-    }
-  });
-
-};
-
-export const initSpectrogram = async (filePath, ctx, miniMapCtx, playButton, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber, audio) => {
-
-  playheadScrubber.addEventListener("pointerdown", (e) => startPlayheadDrag(e, playheadScrubber, playButton, audio));
-  playheadScrubber.addEventListener("pointermove", (e) => dragPlayhead(e, ctx, miniMapCtx, playheadScrubber, playheadCanvasCtx, mainPlayheadCanvasCtx, mainPlayheadScrubber, audio));
-  playheadScrubber.addEventListener("pointerup", (e) => endPlayheadDrag(e, ctx, miniMapCtx, playheadScrubber, playheadCanvasCtx, mainPlayheadCanvasCtx, mainPlayheadScrubber, playButton, audio));
-
-  mainPlayheadScrubber.addEventListener("pointerdown", (e) => startMainPlayheadDrag(e, mainPlayheadScrubber, playButton, audio));
-  mainPlayheadScrubber.addEventListener("pointermove", (e) => dragMainPlayhead(e, ctx, miniMapCtx, playheadScrubber, playheadCanvasCtx, mainPlayheadCanvasCtx, mainPlayheadScrubber, audio));
-  mainPlayheadScrubber.addEventListener("pointerup", (e) => endMainPlayheadDrag(e, ctx, miniMapCtx, playheadScrubber, playheadCanvasCtx, mainPlayheadCanvasCtx, mainPlayheadScrubber, playButton, audio));
-
-  playButton.addEventListener("click", () => togglePlayback(playButton, ctx, miniMapCtx, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber, audio));
   await initWorkers();
-  const fileBytes = await fetch(filePath);
-  const result = await fileBytes.arrayBuffer();
+  const fileBytes = await (await fetch(filePath)).arrayBuffer();
+  const audioFileUrl = getAudioObject(fileBytes);
   // Copy the audio for playback - ideally do this only if playback is requested
-  audioBytes = new ArrayBuffer(result.byteLength);
-  new Uint8Array(audioBytes).set(new Uint8Array(result));
-  await initAudio(audio, playButton);
-  // console.log(audioBytes.byteLength);
-  let s = performance.now();
-  wavData = await audioContext.decodeAudioData(result);
-  //audioBytes = wavData;
-  floatData = wavData.getChannelData(0);
-
+  const audioContext = new OfflineAudioContext({
+    length: 1024*1024,
+    sampleRate: 48000,
+  });
+  const wavData = await audioContext.decodeAudioData(fileBytes);
+  state.floatData = wavData.getChannelData(0);
   // What's the max zoom?
   // Let's say it's FFT_WIDTH per pixel.
 
-
-  let f = (floatData.length / numWorkers);
+  let f = (state.floatData.length / numWorkers);
   let g = f + (FFT_WIDTH - (f % FFT_WIDTH));
   let k = g * numWorkers;
-  sharedFloatData = new Float32Array(new SharedArrayBuffer(k * 4));
-  sharedFloatData.set(floatData, 0);
-};
+  state.sharedFloatData = new Float32Array(new SharedArrayBuffer(k * 4));
+  state.sharedFloatData.set(state.floatData, 0);
 
-export const numAudioSamples = () => {
-  return floatData.length;
-}
-
-let prevLeft = 0;
-let prevRight = 1;
-
-let pendingRender = {
-  start: 0,
-  end: 0,
-  complete: true,
-  buffer: null,
-};
-export const renderRange = async (ctx, miniMapCtx, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber, startZeroOne, endZeroOne, initialRender = false) => {
-  if (initialRender || (startZeroOne !== prevLeft || endZeroOne !== prevRight)) {
-    prevLeft = startZeroOne;
-    prevRight = endZeroOne;
-    const length = floatData.length;
-    // NOTE: Round the start/end UP to a multiple of FFT window size, then clip that extra bit off when rendering.
-    // We need to move along 0.5 (it seems) window lengths for things to line up correctly.
-    const startSample = Math.floor(length * startZeroOne) + (FFT_WIDTH * 0.5);
-    // NOTE: We can go past endSample, because we've extended the sharedFloatBuffer with additional padding.
-    const endSample = Math.ceil(length * endZeroOne) + (FFT_WIDTH * 0.5);
-
-    // Kick off this render of the full visible region at optimal resolution, as long as it's not already processing.
-    // Once ready, stretch it as best we can to the visible region.
-    if (pendingRender.complete) {
-      pendingRender.complete = false;
-      // Kick off a render at the current zoom level.
-      renderArrayBuffer(ctx, startZeroOne, endZeroOne, startSample, endSample).then(async () => {
-        // Actually do the render from the new imageData we just created.
-        //console.log("Rendered array buffer for ", startZeroOne, endZeroOne);
-        if (initialRender) {
-          await renderToContext(miniMapCtx, startZeroOne, endZeroOne);
-          await renderToContext(ctx, startZeroOne, endZeroOne);
-        } else {
-          await renderToContext(ctx, startZeroOne, endZeroOne);
-        }
-        pendingRender.complete = true;
-      });
-    } else {
-      // Else, use the best composite of existing renders to stretch to the visible region.
-      await renderToContext(ctx, startZeroOne, endZeroOne);
-      progressSampleTime = performance.now();
-      updatePlayhead(ctx, miniMapCtx, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber);
-    }
+  const invalidateCanvasCaches = () => {
+    state.imageDatas = [];
+    state.pendingRender.complete = true;
+    state.max = undefined;
   }
+
+  return {
+    renderRange: renderRange(state),
+    renderToContext: renderToContext(state),
+    audioFileUrl,
+    numAudioSamples: state.floatData.length,
+    invalidateCanvasCaches
+  };
 };
 
-const renderToContext = async (ctx, startZeroOne, endZeroOne) => {
+const renderRange = (state) => async (startZeroOne, endZeroOne, renderWidth, force) => {
+  return new Promise((resolve) => {
+    if (force || startZeroOne !== state.prevLeft || endZeroOne !== state.prevRight || renderWidth !== state.canvasWidth) {
+      const length = state.floatData.length;
+      // NOTE: Round the start/end UP to a multiple of FFT window size, then clip that extra bit off when rendering.
+      // We need to move along 0.5 (it seems) window lengths for things to line up correctly.
+      const startSample = Math.floor(length * startZeroOne) + (FFT_WIDTH * 0.5);
+      // NOTE: We can go past endSample, because we've extended the sharedFloatBuffer with additional padding.
+      const endSample = Math.ceil(length * endZeroOne) + (FFT_WIDTH * 0.5);
+
+      // Kick off this render of the full visible region at optimal resolution, as long as it's not already processing.
+      // Once ready, stretch it as best we can to the visible region.
+      if (state.pendingRender.complete || force) {
+        state.pendingRender.complete = false;
+        // Kick off a render at the current zoom level.
+        renderArrayBuffer(state, renderWidth, startZeroOne, endZeroOne, startSample, endSample).then(() => {
+          // console.log("Got rendered range", startZeroOne, endZeroOne);
+          state.prevLeft = startZeroOne;
+          state.canvasWidth = renderWidth;
+          state.prevRight = endZeroOne;
+          state.pendingRender.complete = true;
+          resolve();
+        });
+
+      } else {
+        resolve();
+        // Else, use the best composite of existing renders to stretch to the visible region.
+        //await renderToContext(state, ctx, startZeroOne, endZeroOne);
+        //state.progressSampleTime = performance.now();
+        //updatePlayhead(state, ctx, miniMapCtx, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber);
+      }
+    }
+  });
+};
+
+const renderToContext = (state) => async (ctx, startZeroOne, endZeroOne) => {
+  //debugger;
   // Figure out the best intermediate render to stretch.
   // Do we store the final coloured imagedata to stretch, or the FFT array data?
   //console.log("Render to context", startZeroOne, endZeroOne);
-  const fullRange = imageDatas[0];
+  const fullRange = state.imageDatas[0];
   //console.log(imageDatas);
   let bestMatch = null;
   let exactMatch = false;
-  for (let i = 0; i < imageDatas.length; i++) {
+  for (let i = 0; i < state.imageDatas.length; i++) {
     // Find the best match for the range
-    let data = imageDatas[i];
+    let data = state.imageDatas[i];
     if (bestMatch) {
       const dStart = startZeroOne - data.startZeroOne;
       const bmStart = startZeroOne - bestMatch.startZeroOne;
@@ -383,15 +163,31 @@ const renderToContext = async (ctx, startZeroOne, endZeroOne) => {
   }
   //console.log(bestMatch);
   if (bestMatch && exactMatch) {
-    //const bitmap = await createImageBitmap(new ImageData(imageData, WIDTH, HEIGHT), 0, 0, WIDTH, Math.round((HEIGHT / 3) * 2), {resizeQuality: "high"});
+    //console.log("Exact match", startZeroOne, endZeroOne, bestMatch);
+    // //const bitmap = await createImageBitmap(new ImageData(imageData, WIDTH, HEIGHT), 0, 0, WIDTH, Math.round((HEIGHT / 3) * 2), {resizeQuality: "high"});
+
+    //const sX = fullRange.width * startZeroOne; //(1/fullRange.r)
+    const sW = bestMatch.width;//(bestMatch.width * bestMatch.r); //* (1/fullRange.r)
     const bitmap = await createImageBitmap(
-      new ImageData(bestMatch.imageData, bestMatch.width, bestMatch.height), 0, 0, bestMatch.width, Math.round((bestMatch.height / 3) * 2), {
+      new ImageData(bestMatch.imageData, bestMatch.width, bestMatch.height), 0, 0, sW, Math.round((bestMatch.height / 3) * 2), {
         resizeQuality: "high",
         resizeWidth: ctx.canvas.width,
         resizeHeight: ctx.canvas.height
       });
     ctx.drawImage(bitmap, 0, 0);
   } else if (bestMatch) {
+    //console.log("best match", bestMatch, startZeroOne, endZeroOne);
+    const sX = fullRange.width * startZeroOne; //(1/fullRange.r)
+    const sW = (fullRange.width  * endZeroOne) - sX; //* (1/fullRange.r)
+    const bitmap = await createImageBitmap(
+      new ImageData(fullRange.imageData, fullRange.width, fullRange.height), sX, 0, sW, Math.round((fullRange.height / 3) * 2), {
+        resizeQuality: "high",
+        resizeWidth: ctx.canvas.width,
+        resizeHeight: ctx.canvas.height
+      });
+    ctx.drawImage(bitmap, 0, 0);
+
+
     // Zoom in on the part of the bitmap we care about.
     // const bitmap = await createImageBitmap(new ImageData(
     //   bestMatch.imageData,
@@ -407,6 +203,7 @@ const renderToContext = async (ctx, startZeroOne, endZeroOne) => {
     // ctx.drawImage(bitmap, 0, 0);
     //console.log("No exact match, skipping frame");
   }
+  return state;
 };
 //let py;
 const render = (max, sharedOutputData, width, HEIGHT, r) => {
@@ -505,17 +302,16 @@ const resampleAudioBuffer = async (audioBuffer, targetSampleRate) => {
     offlineContext.startRendering();
   });
 };
-
-let imageDatas = [];
-let max;
-async function renderArrayBuffer(canvasCtx, startZeroOne, endZeroOne, startSample, endSample) {
-  const WIDTH = canvasCtx.canvas.width;
-  if (!sharedOutputData) {
-    // FIXME - Handle resizes
-    sharedOutputData = new Float32Array(new SharedArrayBuffer(WIDTH * 4 * HEIGHT));
+async function renderArrayBuffer(state, canvasWidth, startZeroOne, endZeroOne, startSample, endSample) {
+  const widthChanged = canvasWidth !== state.canvasWidth;
+  if (!state.sharedOutputData || widthChanged) {
+    if (!state.sharedOutputData || canvasWidth > state.canvasWidth) {
+      // Realloc on resize
+      state.sharedOutputData = new Float32Array(new SharedArrayBuffer(canvasWidth * 4 * HEIGHT));
+    }
   }
   let length = endSample - startSample;
-  const numChunks = numWorkers;
+  const numChunks = 1;//numWorkers;
   let cLength = length / numChunks;
   let paddedChunkLength = (cLength + (FFT_WIDTH - (cLength % FFT_WIDTH)));
   const r = (length / (paddedChunkLength * numChunks));
@@ -534,7 +330,7 @@ async function renderArrayBuffer(canvasCtx, startZeroOne, endZeroOne, startSampl
     const end = start + paddedChunkLength;
     // HMM, this might actually be quite a bit slower than just slicing up a single array?
     //const sharedOutputData = new Float32Array(new SharedArrayBuffer(Math.ceil(width / numChunks) * 2048 * 4));
-    const chunkLen = Math.ceil(WIDTH / numChunks) * (FFT_WIDTH / 2);
+    const chunkLen = Math.ceil(canvasWidth / numChunks) * (FFT_WIDTH / 2);
     //console.log("Chunk LEN", chunkLen, (WIDTH / numChunks) * 1024);
     const start2 = chunk * chunkLen;
     const end2 = (chunk * chunkLen) + chunkLen;
@@ -564,9 +360,9 @@ async function renderArrayBuffer(canvasCtx, startZeroOne, endZeroOne, startSampl
     // console.log("c len", end - start);
     job.push(workers[chunk].doWork({
       type: "Process",
-      data: sharedFloatData.subarray(start, end),
-      prelude: sharedFloatData.slice(preludeStart, preludeEnd),
-      output: sharedOutputData.subarray(start2, Math.min(end2, sharedOutputData.length))
+      data: state.sharedFloatData.subarray(start, end),
+      prelude: state.sharedFloatData.slice(preludeStart, preludeEnd),
+      output: state.sharedOutputData.subarray(start2, Math.min(end2, state.sharedOutputData.length))
     }));
   }
   //console.log("Dispatching work", performance.now() - sss);
@@ -578,10 +374,9 @@ async function renderArrayBuffer(canvasCtx, startZeroOne, endZeroOne, startSampl
 
   // FIXME - Only grab the maxes once, at startup? It's possible there are smaller sounds that aren't captured at that zoom
   //  level, and the max may need to be adjusted though.
-
   const maxes = await Promise.all(job);
-  if (!max) {
-    max = Math.max(...maxes.map(({max}) => max));
+  if (!state.max) {
+    state.max = Math.max(...maxes.map(({max}) => max));
   }
   //console.log("MAX", max);
   //max -= 1;
@@ -596,9 +391,24 @@ async function renderArrayBuffer(canvasCtx, startZeroOne, endZeroOne, startSampl
   // console.log((1/r) * sharedFloatData.length);
   // console.log("e vs actual", actualEnd, sharedOutputData.length);
   //console.log("w,h", WIDTH, HEIGHT);
-  let width = Math.ceil(WIDTH * r);
+  let width = Math.ceil(canvasWidth * r);
   //imageDatas.push({startZeroOne, endZeroOne, imageData: render(max, sharedOutputData, width, HEIGHT, r), r, width, height: HEIGHT});
-  imageDatas = [{startZeroOne, endZeroOne, imageData: render(max, sharedOutputData, width, HEIGHT, r), r, width, height: HEIGHT}];
+  const nextImageData = {
+    startZeroOne,
+    endZeroOne,
+    imageData: render(state.max, state.sharedOutputData, width, HEIGHT, r),
+    r,
+    width,
+    height: HEIGHT
+  };
+
+  if (state.imageDatas.length === 0) {
+    state.imageDatas = [nextImageData];
+  } else if (state.imageDatas.length === 1) {
+    state.imageDatas.push(nextImageData);
+  } else {
+    state.imageDatas[1] = nextImageData;
+  }
   //await renderFrame(ctx, sharedOutputData.subarray(0, sharedOutputData.length), max);
   // console.log("Rendering total", performance.now() - renderTime);
   // console.log("Rendering + FFT", performance.now() - sss);

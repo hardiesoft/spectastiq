@@ -21,9 +21,8 @@ Try [the example](https://hardiesoft.com/spectastiq/):
 - Dispatch events to the parent page, for more advanced integrations.
 
 ## Known issues
-- Resizing is not yet supported.  It breaks when you resize the page or containing element.
 - Okay, I lied when I described how easy *spectastiq* is to use.  It currently relies on an advanced JavaScript feature called `SharedArrayBuffer`, which helps *spectastiq* to use all your computers power to render spectrograms really fast.  `SharedArrayBuffer` requires the integrator to serve up their website using some additional HTTP headers to opt-in to a secure context.  We'll soon support an easier, but slower path which will make embedding *spectastiq* when you don't have control over how your pages are served more seamless.
-- Multiple instances of *spectastiq* are not currently supported, but they will be soon.
+- Resizing currently breaks when you move the browser window containing *spectastiq* between displays with different `devicePixelRatio`s.
 
 ### Acknowledgements
 

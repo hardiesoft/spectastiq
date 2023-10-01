@@ -1,5 +1,6 @@
-import {initTimeline, renderInitial} from "./timeline-wrapper.js";
+import {initTimeline} from "./timeline-wrapper.js";
 import {initSpectrogram} from "./spectrogram-renderer.js";
+import {initAudio, initAudioPlayer, updatePlayhead} from "./audio-player.js";
 
 class Spectastiq extends HTMLElement {
   constructor() {
@@ -54,19 +55,19 @@ class Spectastiq extends HTMLElement {
     playheadScrubber.setAttribute("class", "playhead-scrubber");
     const controls = document.createElement("div");
     controls.setAttribute("class", "controls");
-    const playToggle = document.createElement("button");
-    playToggle.setAttribute("class", "play-toggle control-button paused");
-    playToggle.setAttribute("disabled", "disabled");
+    const playButton = document.createElement("button");
+    playButton.setAttribute("class", "play-toggle control-button paused");
+    playButton.setAttribute("disabled", "disabled");
 
     const loadingSpinner = document.createElement("div");
     loadingSpinner.setAttribute("class", "lds-ring");
-    loadingSpinner.style.top = `calc(${canvas.height * 0.5}px - 20px)`;
+    loadingSpinner.style.top = `calc(${canvas.height * 0.5}px - 10px)`;
     for (let i = 0; i < 4; i++) {
       const item = document.createElement("div");
       loadingSpinner.append(item);
     }
 
-    playToggle.innerHTML = `
+    playButton.innerHTML = `
       <svg class="play-icon" xmlns="http://www.w3.org/2000/svg" height="1em" viewBox="0 0 384 512"><path fill="currentColor" d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg>
       <svg class="pause-icon" xmlns="http://www.w3.org/2000/svg" height="1em" viewBox="0 0 320 512"><path fill="currentColor" d="M48 64C21.5 64 0 85.5 0 112V400c0 26.5 21.5 48 48 48H80c26.5 0 48-21.5 48-48V112c0-26.5-21.5-48-48-48H48zm192 0c-26.5 0-48 21.5-48 48V400c0 26.5 21.5 48 48 48h32c26.5 0 48-21.5 48-48V112c0-26.5-21.5-48-48-48H240z"/></svg>
     `;
@@ -79,7 +80,7 @@ class Spectastiq extends HTMLElement {
     handle.append(handleLeft, handleRight);
     playhead.append(playheadScrubber);
     miniMap.append(mapCanvas, playheadCanvas, leftOfHandle, handle, rightOfHandle, playhead);
-    controls.append(playToggle);
+    controls.append(playButton);
     container.append(mainPlayhead, canvas, mainPlayheadCanvas, miniMap, controls, loadingSpinner);
 
     const audio = document.createElement("audio");
@@ -273,12 +274,13 @@ class Spectastiq extends HTMLElement {
           user-select: none;
           position: absolute;
           cursor: grab;
+          display: none;
       }
       .main-playhead-scrubber {         
           height: 44px;
           width: 44px;
           position: relative;
-          left: -22px;        
+          left: -22px;                 
       }
       .main-playhead-scrubber > div {
           position: absolute;                
@@ -294,6 +296,7 @@ class Spectastiq extends HTMLElement {
           border-left: 5px solid transparent;
           border-right: 5px solid transparent; 
           border-top: 20px solid white;
+         
       }
          
       .lds-ring {
@@ -337,18 +340,144 @@ class Spectastiq extends HTMLElement {
 
     this.shadowRoot.append(styles, container, audio);
 
-    initTimeline(canvas, mainPlayheadCanvas, mainPlayheadScrubber, mapCanvas, playheadCanvas, handle, handleLeftInner, handleRightInner, leftOfHandle, rightOfHandle, playheadScrubber).then(() => {
-      initSpectrogram(src, canvas.getContext("2d"), mapCanvas.getContext("2d"), playToggle, playheadCanvas.getContext("2d"), playheadScrubber, mainPlayheadCanvas.getContext("2d"), mainPlayheadScrubber, audio).then(() => {
-        renderInitial().then(() => {
-          // TODO: No controls should work until loading is complete.
-          container.removeChild(loadingSpinner);
-          playToggle.removeAttribute("disabled");
-          this.shadowRoot.dispatchEvent(new Event("loaded", { composed: true, bubbles: false, cancelable: false }));
-        });
-      })
-    });
+    const timelineElements = {
+      handle,
+      handleLeftInner,
+      handleRightInner,
+      leftOfHandle,
+      rightOfHandle,
+      mapCanvas,
+      canvas,
+    };
 
-    //await adjustZoom({ preventDefault: () => {}, x: 0, deltaY: 0 });
+    const playerElements = {
+      playheadCanvas,
+      playheadScrubber,
+      mainPlayheadScrubber,
+      mainPlayheadCanvas,
+      audio,
+      playButton,
+      canvas,
+      playheadCanvasCtx: playheadCanvas.getContext("2d"),
+      mainPlayheadCanvasCtx: mainPlayheadCanvas.getContext("2d"),
+    };
+    const resizeCanvas = (canvas) => {
+      const bounds = canvas.parentElement.getBoundingClientRect();
+      canvas.style.height = `${canvas.height}px`;
+      canvas.height = canvas.height * devicePixelRatio;
+      canvas.width = bounds.width * devicePixelRatio;
+      canvas.style.width = `${bounds.width}px`;
+    };
+
+
+    const mapCtx = mapCanvas.getContext("2d");
+    const ctx = canvas.getContext("2d");
+
+    (async () => {
+      let raf;
+      const render = ({ detail: { initialRender, force }}) => {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => {
+          const startZeroOne = timelineState.left;
+          const endZeroOne = timelineState.right;
+          positionHandles(startZeroOne, endZeroOne);
+          if (!audioState.playing) {
+            audioState.progressSampleTime = performance.now();
+            updatePlayhead(audioState, timelineState, sharedState, playerElements);
+          }
+          //audioState.progressSampleTime = performance.now();
+          // console.log("render range", startZeroOne, endZeroOne);
+          renderToContext(ctx, startZeroOne, endZeroOne).then(() => {
+            //console.trace("render context", timelineState.left, timelineState.right);
+          });
+          if (initialRender) {
+            renderToContext(mapCtx, 0, 1);
+          }
+          renderRange(startZeroOne, endZeroOne, canvas.width, force).then(() => {
+            renderToContext(ctx, timelineState.left, timelineState.right).then(() => {
+              //console.log("render context", timelineState.left, timelineState.right);
+            });
+            if (initialRender) {
+              console.log("should rerender minimap");
+              renderToContext(mapCtx, 0, 1).then(() => {
+                console.log("rerender minimap");
+                if (loadingSpinner.parentElement) {
+                  container.removeChild(loadingSpinner);
+                  playButton.removeAttribute("disabled");
+                  this.shadowRoot.dispatchEvent(new Event("loaded", {composed: true, bubbles: false, cancelable: false}));
+                }
+              });
+            }
+          });
+
+          //const renderState = await renderToContext(ctx, startZeroOne, endZeroOne);
+          // state.prevLeft = startZeroOne;
+          // state.prevRight = endZeroOne;
+          //renderState.pendingRender.complete = true;
+        });
+      };
+
+      const sharedState = { interacting: false };
+
+      const { renderRange, renderToContext, audioFileUrl, numAudioSamples, invalidateCanvasCaches } = await initSpectrogram(src);
+      const { positionHandles, timelineState } = initTimeline(sharedState, timelineElements, numAudioSamples);
+      const { audioState, updatePlayhead } = initAudioPlayer(sharedState, timelineState, playerElements);
+      await initAudio(playerElements, audioFileUrl, audioState);
+
+      canvas.addEventListener("interaction-begin", () => {
+        //console.log("interaction begin");
+        sharedState.interacting = true;
+      });
+      canvas.addEventListener("interaction-end", () => {
+        sharedState.interacting = false;
+        //console.log("interaction end", timelineState.left, timelineState.right);
+        render({detail: {initialRender: false, force: true }});
+      });
+      canvas.addEventListener("range-change", render);
+      canvas.dispatchEvent(new CustomEvent("range-change", {
+        detail: {
+          startZeroOne: 0,
+          endZeroOne: 1,
+          initialRender: true
+        }
+      }));
+      const resizeCanvases = (e) => {
+        resizeCanvas(timelineElements.canvas);
+        resizeCanvas(playerElements.mainPlayheadCanvas);
+        resizeCanvas(timelineElements.mapCanvas);
+        resizeCanvas(playerElements.playheadCanvas);
+        if (e) {
+          {
+            const startZeroOne = timelineState.left;
+            const endZeroOne = timelineState.right;
+            positionHandles(startZeroOne, endZeroOne);
+            if (!audioState.playing) {
+              audioState.progressSampleTime = performance.now();
+              updatePlayhead(audioState, timelineState, sharedState, playerElements);
+            }
+            //audioState.progressSampleTime = performance.now();
+            // console.log("render range", startZeroOne, endZeroOne);
+            renderToContext(ctx, startZeroOne, endZeroOne).then(() => {
+              //console.trace("render context", timelineState.left, timelineState.right);
+            });
+          }
+
+          timelineElements.canvas.dispatchEvent(new Event("interaction-begin"));
+          clearTimeout(sharedState.interactionTimeout);
+          sharedState.interactionTimeout = setTimeout(() => {
+            invalidateCanvasCaches();
+            renderRange(0, 1, canvas.width, true).then(() => {
+              render({detail: {initialRender: true, force: true }});
+            });
+            sharedState.interacting = false;
+            //timelineElements.canvas.dispatchEvent(new Event("interaction-end"));
+          }, 300);
+        }
+      };
+
+      window.addEventListener("resize", resizeCanvases);
+      resizeCanvases();
+    })();
   }
 }
 customElements.define("spectastiq-viewer", Spectastiq);
