@@ -43,13 +43,12 @@ if(typeof window === 'undefined') {
   }
 
   self.addEventListener("fetch", function(e) {
-    e.respondWith(handleFetch(e.request)); // respondWith must be executed synchonously (but can be passed a Promise)
+    e.respondWith(handleFetch(e.request)); // respondWith must be executed synchronously (but can be passed a Promise)
   });
 
 } else {
   (async function() {
     if(window.crossOriginIsolated !== false) return;
-
     let registration = await navigator.serviceWorker.register(window.document.currentScript.src).catch(e => console.error("COOP/COEP Service Worker failed to register:", e));
     if(registration) {
       console.log("COOP/COEP Service Worker registered", registration.scope);
@@ -64,6 +63,7 @@ if(typeof window === 'undefined') {
         console.log("Reloading page to make use of COOP/COEP Service Worker.");
         window.location.reload();
       }
+
     }
   })();
 }

@@ -369,7 +369,6 @@ class Spectastiq extends HTMLElement {
       canvas.style.width = `${bounds.width}px`;
     };
 
-
     const mapCtx = mapCanvas.getContext("2d");
     const ctx = canvas.getContext("2d");
 
@@ -398,9 +397,7 @@ class Spectastiq extends HTMLElement {
               //console.log("render context", timelineState.left, timelineState.right);
             });
             if (initialRender) {
-              console.log("should rerender minimap");
               renderToContext(mapCtx, 0, 1).then(() => {
-                console.log("rerender minimap");
                 if (loadingSpinner.parentElement) {
                   container.removeChild(loadingSpinner);
                   playButton.removeAttribute("disabled");

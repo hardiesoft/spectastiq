@@ -1,6 +1,4 @@
-import * as spectastiq from './pkg/spectastiq-backend.js';
 import {colourMap} from "./colormaps.js";
-import {positionHandles} from "./timeline-wrapper.js";
 
 const FFT_WIDTH = 2048;
 
@@ -18,15 +16,12 @@ const numWorkers = (navigator.hardwareConcurrency || 2) - 1;
 async function initWorkers() {
 
   // TODO: Share wasm module among workers rather than initing/downloading it for each?
-
-  const _mod = await spectastiq.default("./pkg/spectastic_bg.wasm");
-  //console.log(mod);
-  spectastiq.init_logger();
+  const wasm = await (await fetch("./pkg/spectastic_bg.wasm")).arrayBuffer();
   const initWorkers = [];
   for (let i = 0; i < numWorkers; i++) {
     const worker = new WorkerPromise(`fft-worker-${i}`);
     workers.push(worker);
-    initWorkers.push(worker.init());
+    initWorkers.push(worker.init(wasm));
   }
   await Promise.all(initWorkers);
 }
@@ -265,7 +260,7 @@ const render = (max, sharedOutputData, width, HEIGHT, r) => {
 class WorkerPromise {
   constructor(name) {
     this.name = name;
-    this.worker = new Worker("spectastiq-worker.mjs", {type: "module"});
+    this.worker = new Worker("./spectastiq-worker.js", {type: "module", credentials: "include"});
     this.worker.onmessage = ({data}) => {
       // Resolve;
       this.work[data.id](data);
@@ -284,9 +279,10 @@ class WorkerPromise {
     });
   }
 
-  init() {
+  init(wasm) {
     return this.doWork({
-      type: "Init"
+      type: "Init",
+      wasm
     });
   }
 }
@@ -307,6 +303,7 @@ async function renderArrayBuffer(state, canvasWidth, startZeroOne, endZeroOne, s
   if (!state.sharedOutputData || widthChanged) {
     if (!state.sharedOutputData || canvasWidth > state.canvasWidth) {
       // Realloc on resize
+
       state.sharedOutputData = new Float32Array(new SharedArrayBuffer(canvasWidth * 4 * HEIGHT));
     }
   }
