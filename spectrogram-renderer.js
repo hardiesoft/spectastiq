@@ -14,7 +14,7 @@ let sharedOutputData;// = new Float32Array(new SharedArrayBuffer(WIDTH * 4 * HEI
 let audioCurrentTimeZeroOne = 0;
 //const ctx = canvas.getContext('2d');
 const workers = [];
-const numWorkers = navigator.hardwareConcurrency - 1;
+const numWorkers = (navigator.hardwareConcurrency || 2) - 1;
 async function initWorkers() {
 
   // TODO: Share wasm module among workers rather than initing/downloading it for each?
