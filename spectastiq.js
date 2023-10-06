@@ -361,12 +361,11 @@ class Spectastiq extends HTMLElement {
       playheadCanvasCtx: playheadCanvas.getContext("2d"),
       mainPlayheadCanvasCtx: mainPlayheadCanvas.getContext("2d"),
     };
-    const resizeCanvas = (canvas) => {
-      const bounds = canvas.parentElement.getBoundingClientRect();
-      canvas.style.height = `${canvas.height}px`;
-      canvas.height = canvas.height * devicePixelRatio;
-      canvas.width = bounds.width * devicePixelRatio;
-      canvas.style.width = `${bounds.width}px`;
+    const resizeCanvas = (canvas, width, height) => {
+      canvas.style.height = `${height}px`;
+      canvas.height = height * devicePixelRatio;
+      canvas.width = width * devicePixelRatio;
+      canvas.style.width = `${width}px`;
     };
 
     const mapCtx = mapCanvas.getContext("2d");
@@ -439,10 +438,11 @@ class Spectastiq extends HTMLElement {
         }
       }));
       const resizeCanvases = (e) => {
-        resizeCanvas(timelineElements.canvas);
-        resizeCanvas(playerElements.mainPlayheadCanvas);
-        resizeCanvas(timelineElements.mapCanvas);
-        resizeCanvas(playerElements.playheadCanvas);
+        const width = container.getBoundingClientRect().width;
+        resizeCanvas(timelineElements.canvas, width, 300);
+        resizeCanvas(playerElements.mainPlayheadCanvas, width, 300);
+        resizeCanvas(timelineElements.mapCanvas, width, 60);
+        resizeCanvas(playerElements.playheadCanvas, width, 60);
         if (e) {
           {
             const startZeroOne = timelineState.left;
@@ -455,6 +455,9 @@ class Spectastiq extends HTMLElement {
             //audioState.progressSampleTime = performance.now();
             // console.log("render range", startZeroOne, endZeroOne);
             renderToContext(ctx, startZeroOne, endZeroOne).then(() => {
+              //console.trace("render context", timelineState.left, timelineState.right);
+            });
+            renderToContext(mapCtx, 0, 1).then(() => {
               //console.trace("render context", timelineState.left, timelineState.right);
             });
           }
