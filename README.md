@@ -1,4 +1,4 @@
-# *Spectastiq* v0.8
+# *Spectastiq* v0.8.1
 An interactive spectrogram renderer and audio player, optimised for touch devices.
 
 ## Usage
@@ -18,11 +18,10 @@ Try [the example](https://hardiesoft.com/spectastiq/):
 - Support displaying your spectrograms with a logarithmic scale.
 - Wasm SIMD support for even faster spectrogram rendering.
 - VueJS and React wrappers + examples
-- Dispatch events to the parent page, for more advanced integrations.
+- Dispatch life-cycle events to the parent page, for more advanced integrations.
 
 ## Known issues
 - Okay, I lied when I described how easy *spectastiq* is to use.  It currently relies on an advanced JavaScript feature called `SharedArrayBuffer`, which helps *spectastiq* to use all your computers power to render spectrograms really fast.  `SharedArrayBuffer` requires the integrator to serve up their website using some additional HTTP headers to opt-in to a secure context.  We'll soon support an easier, but slower path which will make embedding *spectastiq* when you don't have control over how your pages are served more seamless.
-- Resizing currently breaks when you move the browser window containing *spectastiq* between displays with different `devicePixelRatio`s.
 
 ### Acknowledgements
 
