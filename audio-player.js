@@ -134,33 +134,27 @@ export const initAudio = async (playheadElements, audioFileUrl, state) => {
   return new Promise((resolve) => {
     if (!playheadElements.audio.src) {
       playheadElements.audio.addEventListener("progress", () => {
-        state.audioDuration = playheadElements.audio.duration;
-        resolve();
-        // const ranges = audio.seekable;
-        // console.log(ranges.start(0), ranges.end(0));
-        //console.log(duration);
-        // The duration variable now holds the duration (in seconds) of the audio clip
+        if (playheadElements.audio.duration && !state.audioDuration) {
+          state.audioDuration = playheadElements.audio.duration;
+          resolve();
+        }
+      });
+      playheadElements.audio.addEventListener("loadeddata", () => {
+        if (playheadElements.audio.duration && !state.audioDuration) {
+          state.audioDuration = playheadElements.audio.duration;
+          resolve();
+        }
       });
       playheadElements.audio.addEventListener("timeupdate", () => {
         state.audioProgressZeroOne = playheadElements.audio.currentTime / playheadElements.audio.duration;
         state.progressSampleTime = performance.now();
-        //renderAudioPlayhead(audioProgressZeroOne);
-        // The duration variable now holds the duration (in seconds) of the audio clip
       });
       playheadElements.audio.addEventListener("ended", () => {
         state.playing = false;
         pauseAudio(state, playheadElements);
-        // The duration variable now holds the duration (in seconds) of the audio clip
       });
       playheadElements.audio.src = audioFileUrl;
       // TODO: window.URL.revokeObjectURL(url); When unloading
-
-      // audio.addEventListener("loadedmetadata", () => {
-      //   let duration = audio.duration;
-      //   console.log(duration);
-      //   // The duration variable now holds the duration (in seconds) of the audio clip
-      // });
-
     }
     if (playheadElements.audio.currentTime !== undefined && playheadElements.audio.duration !== undefined) {
       state.audioProgressZeroOne = playheadElements.audio.currentTime / playheadElements.audio.duration;
