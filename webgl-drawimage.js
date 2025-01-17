@@ -285,7 +285,6 @@ export const initMainTexture = (gl, texWidth, texHeight) => {
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   }
   const empty =  new Float32Array(new ArrayBuffer(texWidth * 3 * texHeight * 4))// Dummy data;
-  console.log("Init texture", empty.length, empty.byteLength);
   gl.texImage3D(
     gl.TEXTURE_2D_ARRAY,
     0, // mip level

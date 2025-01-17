@@ -7,7 +7,6 @@ async function initWorkers(state) {
   if (state.workers.length === 0) {
     const currentWorkingDir = import.meta.url.split("/");
     currentWorkingDir.pop();
-    // TODO: Share wasm module among workers rather than initing/downloading it for each?
     const wasm = await (
       await fetch(currentWorkingDir.join("/") + "/pkg/spectastiq_bg.wasm")
     ).arrayBuffer();
@@ -81,7 +80,6 @@ export const initSpectrogram = async (filePath, previousState) => {
   }
 
   const invalidateCanvasCaches = () => {
-    console.log("invalidate caches");
     state.imageDatas = [];
     state.pendingRender.complete = true;
     state.max = undefined;
@@ -240,7 +238,7 @@ const renderToContext =
         // Look for a more zoomed out match
         for (let i = 1; i < state.imageDatas.length; i++) {
           const data = state.imageDatas[i];
-          if (data.startZeroOne < startZeroOne && data.endZeroOne > endZeroOne) {
+          if (data.startZeroOne <= startZeroOne && data.endZeroOne >= endZeroOne) {
             zoomingIn = true;
             // Work out what proportion of the more zoomed out image we want.
             cropLeft = mapRange(
@@ -270,10 +268,12 @@ const renderToContext =
           const diff = Math.abs(range - imageRange);
           if (diff > 0.000000000001) {
             // "Zooming out"
-            // TODO
+            // TODO: Better image synthesis of fully zoomed out image, plus existing image that's at a slightly greater
+            //  zoom level.
           } else {
             // "Panning"
-            // TODO
+            // TODO: Better image synthesis of fully zoomed out image + existing portion of image at the zoom level
+            //  we're already at.
             // Paste together the relevant bits of each image.  Best to do this in the shader, so we'd pass two
             // textures, and the various offsets of each, maybe with a feather at the edges
           }
@@ -305,6 +305,8 @@ const renderToContext =
       );
 
       if (isMainCtx) {
+        // TODO: Only redraw overlay ctx if y scale has changed.
+        //  Maybe try and update overlay in parallel in an OffscreenCanvas?
         overlayCtx.clearRect(
           0,
           0,
@@ -332,67 +334,58 @@ const renderToContext =
 
         overlayCtx.restore();
         overlayCtx.save();
-        if (true) {
-          // TODO: Only redraw overlay when things change.  Maybe separate user-overlay from spectastiq overlay.
-          //  Maybe try and update overlay in parallel on offline canvas?
-          //performance.mark("overlayS");
-          state.textMeasurementCache = state.textMeasurementCache || {};
-          const maxFreq = state.actualSampleRate / 2;
-          const pixelRatio = window.devicePixelRatio;
-          overlayCtx.font = `${10 * pixelRatio}px sans-serif`;
-          let prevY = -100;
-
-          // TODO: Try and divide evenly so that max freq appears as a label?
-          //console.log(maxFreq);
-          const divisions = Math.ceil(maxFreq / 1000) + 1;
-          const divisionColor = isDarkTheme ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)";
-          const textColor = isDarkTheme ? "rgba(255, 255, 255, 0.85)" : "rgba(0, 0, 0, 0.85)";
-          for (let i = 0; i <= divisions; i++) {
-            overlayCtx.beginPath();
-            overlayCtx.strokeStyle = divisionColor;
-            overlayCtx.lineWidth = 1;
-            const yy = i / divisions;
-            const yyy = transformY(1 - yy);
-            let y = ((1 - yyy) * overlayCtx.canvas.height) / pixelRatio;
-            if (y - prevY > 15) {
-              overlayCtx.strokeRect(
-                0,
-                y * pixelRatio,
-                overlayCtx.canvas.width,
-                0
-              );
-              overlayCtx.fillStyle = textColor;
-              overlayCtx.textAlign = "right";
-              overlayCtx.textBaseline = "middle";
-              const thisFrequency = Math.round((1 - yy) * maxFreq) / 1000;
-              const label = `${thisFrequency
-                .toFixed(1)
-                .toLocaleString()} kHz`;
-              // NOTE: Measure text takes a fair bit on time on chrome on lower powered android devices; cache measurements.
-              const cacheKey = `${label}_${pixelRatio}`;
-              const textHeight = state.textMeasurementCache[cacheKey] || overlayCtx.measureText(label).actualBoundingBoxAscent;
-              state.textMeasurementCache[cacheKey]  = textHeight;
-              const overshootTop = y - ((textHeight + (5 * pixelRatio)) * 0.5);
-              const overshootBottom = y + ((textHeight + (5 * pixelRatio)) * 0.5);
-              const overshotTop = overshootTop <= 0;
-              const overshotBottom = overshootBottom >= overlayCtx.canvas.height / pixelRatio;
-              if (overshotBottom) {
-                overlayCtx.textBaseline = "bottom";
-              }
-              else if (overshotTop) {
-                overlayCtx.textBaseline = "top";
-                y += (2 * pixelRatio);
-              }
-              // overlayCtx.fillText(
-              //   label,
-              //   overlayCtx.canvas.width - 4,
-              //   y * pixelRatio
-              // );
-              prevY = y;
+        state.textMeasurementCache = state.textMeasurementCache || {};
+        const maxFreq = state.actualSampleRate / 2;
+        const pixelRatio = window.devicePixelRatio;
+        overlayCtx.font = `${10 * pixelRatio}px sans-serif`;
+        let prevY = -100;
+        const divisions = Math.ceil(maxFreq / 1000) + 1;
+        const divisionColor = isDarkTheme ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)";
+        const textColor = isDarkTheme ? "rgba(255, 255, 255, 0.85)" : "rgba(0, 0, 0, 0.85)";
+        for (let i = 0; i <= divisions; i++) {
+          overlayCtx.beginPath();
+          overlayCtx.strokeStyle = divisionColor;
+          overlayCtx.lineWidth = 1;
+          const yy = i / divisions;
+          const yyy = transformY(1 - yy);
+          let y = ((1 - yyy) * overlayCtx.canvas.height) / pixelRatio;
+          if (y - prevY > 15) {
+            overlayCtx.strokeRect(
+              0,
+              y * pixelRatio,
+              overlayCtx.canvas.width,
+              0
+            );
+            overlayCtx.fillStyle = textColor;
+            overlayCtx.textAlign = "right";
+            overlayCtx.textBaseline = "middle";
+            const thisFrequency = Math.round((1 - yy) * maxFreq) / 1000;
+            const label = `${thisFrequency
+              .toFixed(1)
+              .toLocaleString()} kHz`;
+            // NOTE: Measure text takes a fair bit on time on chrome on lower powered android devices; cache measurements.
+            const cacheKey = `${label}_${pixelRatio}`;
+            const textHeight = state.textMeasurementCache[cacheKey] || overlayCtx.measureText(label).actualBoundingBoxAscent;
+            state.textMeasurementCache[cacheKey]  = textHeight;
+            const overshootTop = y - ((textHeight + (5 * pixelRatio)) * 0.5);
+            const overshootBottom = y + ((textHeight + (5 * pixelRatio)) * 0.5);
+            const overshotTop = overshootTop <= 0;
+            const overshotBottom = overshootBottom >= overlayCtx.canvas.height / pixelRatio;
+            if (overshotBottom) {
+              overlayCtx.textBaseline = "bottom";
             }
+            else if (overshotTop) {
+              overlayCtx.textBaseline = "top";
+              y += (2 * pixelRatio);
+            }
+            // NOTE: fillText is also slow on low-end devices, consider caching text and blitting.
+            overlayCtx.fillText(
+              label,
+              overlayCtx.canvas.width - 4,
+              y * pixelRatio
+            );
+            prevY = y;
           }
-          // performance.mark("overlayE");
-          // performance.measure("overlay", "overlayS", "overlayE");
         }
         overlayCtx.restore();
       }

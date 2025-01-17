@@ -111,7 +111,6 @@ const updateZoom = (
       timelineElements.overlayCanvas.dispatchEvent(
         new Event("interaction-begin")
       );
-      // FIXME: This might be too short a timeout on lower-powered mobile devices
       clearTimeout(sharedState.interactionTimeout);
       sharedState.interactionTimeout = setTimeout(() => {
         timelineElements.overlayCanvas.dispatchEvent(
@@ -534,7 +533,6 @@ const endHandleResize = (e, timelineElements, state) => {
   }
 };
 const dragResize = (e, timelineElements, state, xOffsetZeroOne) => {
-  console.log("drag resize?");
   if (e.isPrimary && e.target.hasPointerCapture(e.pointerId)) {
     const thisOffsetX = xOffsetZeroOne - (state.handleDragOffsetX - state.handleStartOffsetXZeroOne);
     const minRange = 1 / getMaxXZoom(timelineElements.canvas.width, state);
@@ -626,19 +624,15 @@ export const initTimeline = (
 
     if (inSeekTrack) {
       // Clicking outside handle.
-      console.log("click outside handle");
       if (!state.currentAction) {
         clickOutsideHandle(state, timelineElements, xOffsetZeroOne);
       }
     } else {
       if (inResizeHandleLeft) {
-        console.log("resize left");
         startHandleResize(e, timelineElements, state, xOffsetZeroOne, "resize-left");
       } else if (inResizeHandleRight) {
-        console.log("resize right");
         startHandleResize(e, timelineElements, state, xOffsetZeroOne, "resize-right");
       } else {
-        console.log("drag/pan");
         startHandleDrag(e, timelineElements, state, xOffsetZeroOne)
       }
     }
@@ -760,7 +754,7 @@ export const initTimeline = (
           const localPlaybackLeft = Math.max(0, (localProgress * width) - minHandleWidth / 2);
           const localPlaybackRight = localPlaybackLeft + minHandleWidth;
           if (e.offsetX >= localPlaybackLeft && e.offsetX <= localPlaybackRight) {
-            console.log("drag local");
+            // Drag local playtime scrubber
             state.scrubLocalStarted = true;
             state.scrubDragOffsetX = e.offsetX - (localProgress * width);
             state.startPlayheadDrag();
@@ -769,7 +763,7 @@ export const initTimeline = (
           const globalPlaybackLeft = Math.max(0, (audioProgressZeroOne * width) - minHandleWidth / 2);
           const globalPlaybackRight = globalPlaybackLeft + minHandleWidth;
           if (e.offsetX >= globalPlaybackLeft && e.offsetX <= globalPlaybackRight) {
-            console.log("drag global");
+            // Drag global playtime scrubber
             state.scrubGlobalStarted = true;
             state.scrubDragOffsetX = e.offsetX - (audioProgressZeroOne * width);
             state.startPlayheadDrag();
@@ -802,7 +796,6 @@ export const initTimeline = (
     if (numPointers < 1) {
       if (state.scrubLocalStarted || state.scrubGlobalStarted) {
         state.endPlayheadDrag();
-        console.log("End playhead drag");
       }
       state.panStarted = false;
       state.scrubGlobalStarted = false;

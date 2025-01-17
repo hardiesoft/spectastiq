@@ -2034,7 +2034,6 @@
     const buttons =  document.querySelectorAll('.src-button');
     buttons.forEach(button => {
       button.addEventListener('click', (e) => {
-        console.log('clicked', e.target.innerText);
         spectastiq.setAttribute("src", e.target.innerText.trim());
       });
     });

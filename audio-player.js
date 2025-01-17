@@ -293,6 +293,23 @@ const updatePlayhead = (
 
       const playheadInRange =
         progress >= timelineState.left && progress <= timelineState.right;
+
+      if (state.playing) {
+        state.audioStatusPoll = requestAnimationFrame(() => {
+          updatePlayhead(state, timelineState, sharedState, playerElements);
+        });
+      }
+      playerElements.overlayCanvas.dispatchEvent(
+        new CustomEvent("playhead-change", {
+          bubbles: true,
+          composed: true,
+          detail: {
+            timeInSeconds: (progress * state.audioDuration),
+            totalDurationInSeconds: state.audioDuration
+          }
+        })
+      );
+
       if (playheadInRange) {
         const range = timelineState.right - timelineState.left;
         const pro = (progress - timelineState.left) / range;
@@ -319,28 +336,11 @@ const updatePlayhead = (
         drawScrubHandles();
         state.followPlayhead = false;
       }
-      playerElements.overlayCanvas.dispatchEvent(
-        new CustomEvent("playhead-change", {
-          bubbles: true,
-          composed: true,
-          detail: {
-            timeInSeconds: (progress * state.audioDuration),
-            totalDurationInSeconds: state.audioDuration
-          }
-        })
-      );
     }
-  }
-  if (state.playing) {
-    state.audioStatusPoll = requestAnimationFrame(() => {
-      updatePlayhead(state, timelineState, sharedState, playerElements);
-    });
   }
 };
 
 const togglePlayback = (state, timelineState, sharedState, playerElements) => {
-  // TODO: Handle events for seeked, seeking
-  // Check seekable for timeranges that can bee seeked.  If we decoded the full wav, presumably we can seek anywhere.
   if (!state.playing) {
     playAudio(state, timelineState, sharedState, playerElements);
   } else {

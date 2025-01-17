@@ -37,9 +37,6 @@ impl FftContext {
 
     #[wasm_bindgen(js_name = processAudio)]
     pub fn process_audio(&mut self, max_output: &mut [f32], prelude: &[f32], data: &[f32], output: &mut [f32]) {
-        // TODO: I think maybe these arrays get copied into wasm-land, where we'd like to use the
-        //  backing SharedArrayBuffer
-
         let len = data.len() + prelude.len();
         let width = output.len() / HALF_CHUNK_LEN;
         // Chunkify:

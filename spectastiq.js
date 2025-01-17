@@ -278,7 +278,6 @@ export default class Spectastiq extends HTMLElement {
   }
 
   unload() {
-    // TODO:
     this.terminateExistingState && this.terminateExistingState();
     this.terminateExistingState = null;
   }
@@ -345,9 +344,6 @@ export default class Spectastiq extends HTMLElement {
         audioState.togglePlayback();
       }
       audioState.followPlayhead = false;
-
-      console.log("Init with src", this.timeline);
-
       this.persistentSpectrogramState = persistentSpectrogramState;
       this.terminateExistingState = unloadAudio;
       this.terminateWorkers = terminateWorkers;
@@ -499,7 +495,7 @@ export default class Spectastiq extends HTMLElement {
                     startTimeOffset !== 0 &&
                     endTimeOffset !== 1
                   ) {
-                    // TODO: If we're doing an initial render at a zoomed in portion, we need to make sure we create
+                    // NOTE: If we're doing an initial render at a zoomed in portion, we need to make sure we create
                     //  the full range image first.
                     setInitialZoom(
                       startTimeOffset,
@@ -509,10 +505,6 @@ export default class Spectastiq extends HTMLElement {
                       initialRender,
                       true
                     );
-                    console.log("Set initial zoom", startZeroOne, endZeroOne);
-                  } else {
-                    // performance.mark("RenderEnd");
-                    // performance.measure("Render", "RenderStart", "RenderEnd");
                   }
                 });
                 if (initialRender) {
@@ -539,8 +531,6 @@ export default class Spectastiq extends HTMLElement {
                       );
                       this.endLoad();
                     }
-                    // performance.mark("RenderEnd");
-                    // performance.measure("Initial Render", "RenderStart", "RenderEnd");
                   });
                 }
               }
@@ -548,14 +538,9 @@ export default class Spectastiq extends HTMLElement {
           }
         });
       };
-      console.log("Init audio with duration", numAudioSamples / 48000);
-      performance.mark("Init audio start");
       await initAudio(this.playerElements, audioFileUrl, audioState, numAudioSamples / 48000);
-      performance.mark("Init audio end");
-      performance.measure("Init audio", "Init audio start", "Init audio end");
       // Initial render
       this.render({ detail: { initialRender: true, force: true } });
-      console.log("INITIAL RENDER");
       // TODO: Animate to region of interest could be replaced by reactive setting of :start :end props?
       this.resizeCanvases();
     })();
@@ -730,9 +715,7 @@ export default class Spectastiq extends HTMLElement {
         const centerX = start + (end - start) * 0.5;
         // Pad region out by an additional 5%.
         setPlaybackOffset(playbackStart);
-        // // TODO: Go to max zoom, or whatever fits the region with some padding at each side.
         const maxXZoom = getMaxXZoom();
-
         const pRange = (end - start) * 1.1;
         const paddedRange = Math.max(1 / maxXZoom, pRange);
         const range = paddedRange / 2;
