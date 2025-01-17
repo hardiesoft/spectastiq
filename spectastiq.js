@@ -194,7 +194,8 @@ template.innerHTML = `
     width: 64px;
     height: 64px;
     margin: 8px;
-    border: 8px solid #fff;
+    border-width: 8px;
+    border-style: solid;
     border-radius: 50%;
     animation: lds-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
     border-color: #fff transparent transparent transparent;
@@ -284,7 +285,6 @@ export default class Spectastiq extends HTMLElement {
 
   loadSrc(src) {
     const root = this.shadowRoot;
-    const loadingSpinner = root.getElementById("loading-spinner");
     const startTimeOffset = Number(this.getAttribute("start")) || 0;
     const endTimeOffset = Number(this.getAttribute("end")) || 1;
     const {
@@ -435,16 +435,13 @@ export default class Spectastiq extends HTMLElement {
           const endZeroOne = timelineState.right;
           const top = timelineState.top;
           const bottom = timelineState.bottom;
-          drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction, audioState.audioProgressZeroOne);
+          drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
 
           //  FIXME: Doesn't play well with zoom to region of interest.
           if (!audioState.playing) {
             audioState.progressSampleTime = performance.now();
             updatePlayhead();
           }
-
-          //audioState.progressSampleTime = performance.now();
-          //console.log("render range", startZeroOne, endZeroOne);
 
           // Render the stretched version
           renderToContext(
@@ -611,7 +608,7 @@ export default class Spectastiq extends HTMLElement {
       const startZeroOne = timelineState.left;
       const endZeroOne = timelineState.right;
       // TODO: Await requestAnimationFrame?
-      drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction, audioState.audioProgressZeroOne);
+      drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
     });
     overlayCanvas.addEventListener("interaction-end", () => {
       this.sharedState.interacting = false;
@@ -680,8 +677,6 @@ export default class Spectastiq extends HTMLElement {
     this.setGain = setGain;
 
     this.animateToRegionOfInterest = async (start, end, min, max) => {
-      const startTime = performance.now();
-      const endTime = startTime + 200;
       const initialStart = timelineState.left;
       const initialEnd = timelineState.right;
       const initialTop = timelineState.top;
@@ -698,10 +693,8 @@ export default class Spectastiq extends HTMLElement {
         200,
         (left, right, top, bottom, final) => {
           setInitialZoom(left, right, top, bottom, false, final);
-          //updatePlayhead();
         }
       );
-      //updatePlayhead();
     };
 
     this.setPlaybackFrequencyBandPass = (minFreq, maxFreq) => {
@@ -730,8 +723,6 @@ export default class Spectastiq extends HTMLElement {
       }
       {
         const maxYZoom = getMaxYZoom();
-        const initialMin = min;
-        const initialMax = max;
         // Make sure max - min is at least 1/maxYZoom;
         const minZoomYHeight = 1 / maxYZoom;
         let range = max - min;
@@ -779,7 +770,7 @@ export default class Spectastiq extends HTMLElement {
         {
           const startZeroOne = timelineState.left;
           const endZeroOne = timelineState.right;
-          drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction, audioState.audioProgressZeroOne);
+          drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
           if (!audioState.playing) {
             audioState.progressSampleTime = performance.now();
             updatePlayhead();

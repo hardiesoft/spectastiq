@@ -356,7 +356,7 @@ const dragHandle = (e, timelineElements, state, thisOffsetX) => {
 };
 
 export const drawTimelineUI =
-  (timelineElements) => (startZeroOne, endZeroOne, currentAction, audioProgressZeroOne) => {
+  (timelineElements) => (startZeroOne, endZeroOne, currentAction) => {
     // Draw handles on timelineUICanvas.
     const isDarkTheme = false;
     const c = isDarkTheme ? 255 : 50;

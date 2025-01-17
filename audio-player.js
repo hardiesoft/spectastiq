@@ -15,7 +15,7 @@ export const initAudioPlayer = (
       .connect(audioContext.destination);
   });
   const volume = localStorage.getItem("spectastiq-volume") || 1.0;
-  setGain(gainNode, 1);
+  setGain(gainNode, volume);
 
   const state = {
     audioContext,
@@ -42,7 +42,7 @@ export const initAudioPlayer = (
   playerElements.playButton.addEventListener("click", () =>
     togglePlayback(state, timelineState, sharedState, playerElements)
   );
-  playerElements.audio.addEventListener("timeupdate", (e) => {
+  playerElements.audio.addEventListener("timeupdate", () => {
     state.audioProgressZeroOne =
       playerElements.audio.currentTime / state.audioDuration;
     state.progressSampleTime = performance.now();
@@ -259,16 +259,20 @@ const updatePlayhead = (
       const drawScrubHandles = () => {
         // Draw debug playhead hit areas:
         const audioProgressZeroOne = progress;
-        const minHandleWidth = 44 * devicePixelRatio;
+
         const sevenPx = 7 * devicePixelRatio;
         const ctx = mainPlayheadCanvasCtx;
         const startZeroOne = timelineState.left;
         const endZeroOne = timelineState.right;
-        const height = ctx.canvas.height
-        ctx.strokeStyle = 'red';
-        ctx.lineWidth = 1;
-        // const globalPlaybackLeft = Math.max(0, (audioProgressZeroOne * width) - minHandleWidth / 2);
-        // ctx.strokeRect(globalPlaybackLeft, height - minHandleWidth, minHandleWidth, minHandleWidth);
+        const height = ctx.canvas.height;
+
+        {
+          // const minHandleWidth = 44 * devicePixelRatio;
+          // ctx.strokeStyle = 'red';
+          // ctx.lineWidth = 1;
+          // const globalPlaybackLeft = Math.max(0, (audioProgressZeroOne * width) - minHandleWidth / 2);
+          // ctx.strokeRect(globalPlaybackLeft, height - minHandleWidth, minHandleWidth, minHandleWidth);
+        }
         const center = audioProgressZeroOne * width;
         ctx.beginPath();
         ctx.moveTo(center, height);
@@ -279,8 +283,10 @@ const updatePlayhead = (
 
         if (audioProgressZeroOne >= startZeroOne && audioProgressZeroOne <= endZeroOne) {
           const localProgress = (audioProgressZeroOne - startZeroOne) / (endZeroOne - startZeroOne);
-          // const localPlaybackLeft = Math.max(0, (localProgress * width) - minHandleWidth / 2);
-          // ctx.strokeRect(localPlaybackLeft, 0, minHandleWidth, minHandleWidth);
+          {
+            // const localPlaybackLeft = Math.max(0, (localProgress * width) - minHandleWidth / 2);
+            // ctx.strokeRect(localPlaybackLeft, 0, minHandleWidth, minHandleWidth);
+          }
           const center = localProgress * width;
           ctx.beginPath();
           ctx.moveTo(center, sevenPx * 3);

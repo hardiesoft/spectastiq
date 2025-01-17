@@ -417,7 +417,7 @@ class WorkerPromise {
     if (output) {
       this.output = output;
     }
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const jobId = this.id;
       this.id++;
       this.work[jobId] = resolve;
@@ -441,23 +441,6 @@ class WorkerPromise {
     this.worker.terminate();
   }
 }
-const resampleAudioBuffer = async (audioBuffer, targetSampleRate) => {
-  return new Promise((resolve, reject) => {
-    const numFrames =
-      (audioBuffer.length * targetSampleRate) / audioBuffer.sampleRate;
-    const offlineContext = new OfflineAudioContext(
-      audioBuffer.numberOfChannels,
-      numFrames,
-      targetSampleRate
-    );
-    const bufferSource = offlineContext.createBufferSource();
-    bufferSource.buffer = audioBuffer;
-    offlineContext.oncomplete = (event) => resolve(event.renderedBuffer);
-    bufferSource.connect(offlineContext.destination);
-    bufferSource.start(0);
-    offlineContext.startRendering();
-  });
-};
 
 async function renderArrayBuffer(
   state,
@@ -578,6 +561,7 @@ async function renderArrayBuffer(
     state.cropAmountTop = 1 - clip / (FFT_WIDTH / 2);
     // TODO: Crop off noise floor?
   }
+  // noinspection JSSuspiciousNameCombination
   const nextImageData = {
     startZeroOne,
     endZeroOne,

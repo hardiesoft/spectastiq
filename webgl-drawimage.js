@@ -3,9 +3,6 @@ import {
   VIRIDIS,
   PLASMA,
   INFERNO,
-  GRAYSCALE,
-  GRAYSCALE_SQUARED,
-  GRAYSCALE_SQUARED_INVERTED,
   GRAYSCALE_INVERTED
 } from "./colormaps.js";
 
@@ -191,31 +188,8 @@ void main() {
 }
 `;
 
-const orthographic = (width, height) => {
-  return new Float32Array([2, 0, 0, 0, 0, -2, 0, 0, 0, 0, -1, 0, -1, 1, 0, 1]);
-};
-
-const translate = (m, tx, ty) => {
-  m[12] = m[0] * tx + m[4] * ty + m[12];
-  m[13] = m[1] * tx + m[5] * ty + m[13];
-  m[14] = m[2] * tx + m[6] * ty + m[14];
-  m[15] = m[3] * tx + m[7] * ty + m[15];
-};
-
-const scale = (m, sx, sy) => {
-  m[0] *= sx;
-  m[1] *= sx;
-  m[2] *= sx;
-  m[3] *= sx;
-  m[4] *= sy;
-  m[5] *= sy;
-  m[6] *= sy;
-  m[7] *= sy;
-};
-
 // TODO: If there is a long time between swapping from low-res frame to the next hi-res frame, can we cross-fade a blend
 //  between the two in our shader?
-
 const texturesForContexts = new Map();
 const drawImage = (
   gl,
