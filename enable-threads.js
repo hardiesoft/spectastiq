@@ -48,6 +48,9 @@ if(typeof window === 'undefined') {
 
 } else {
   (async function() {
+    if (!navigator.serviceWorker || !navigator.serviceWorker.register) {
+      return;
+    }
     if(window.crossOriginIsolated !== false) return;
     let registration = await navigator.serviceWorker.register(window.document.currentScript.src).catch(e => console.error("COOP/COEP Service Worker failed to register:", e));
     if(registration) {

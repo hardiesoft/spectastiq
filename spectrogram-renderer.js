@@ -1,51 +1,41 @@
-import {colourMap} from "./colormaps.js";
-
+import { init, mapRange } from "./webgl-drawimage.js";
+export const USE_SHARED_ARRAY_BUFFER = true;
 const FFT_WIDTH = 2048;
-
-// const canvas = document.getElementById("canvas");
-// canvas.width = window.innerWidth;
-// const WIDTH = canvas.width;
-//console.log(canvas.width);
-
-const HEIGHT = 1024; // Height needs to be at half the FFT width.
-let sharedOutputData;// = new Float32Array(new SharedArrayBuffer(WIDTH * 4 * HEIGHT));
-let audioCurrentTimeZeroOne = 0;
-//const ctx = canvas.getContext('2d');
-const workers = [];
+const HEIGHT = FFT_WIDTH / 2; // Height needs to be at half the FFT width.
 const numWorkers = (navigator.hardwareConcurrency || 2) - 1;
-async function initWorkers() {
-
-  // TODO: Share wasm module among workers rather than initing/downloading it for each?
-  const wasm = await (await fetch("./pkg/spectastic_bg.wasm")).arrayBuffer();
-  const initWorkers = [];
-  for (let i = 0; i < numWorkers; i++) {
-    const worker = new WorkerPromise(`fft-worker-${i}`);
-    workers.push(worker);
-    initWorkers.push(worker.init(wasm));
+async function initWorkers(state) {
+  if (state.workers.length === 0) {
+    const currentWorkingDir = import.meta.url.split("/");
+    currentWorkingDir.pop();
+    // TODO: Share wasm module among workers rather than initing/downloading it for each?
+    const wasm = await (
+      await fetch(currentWorkingDir.join("/") + "/pkg/spectastiq_bg.wasm")
+    ).arrayBuffer();
+    const initWorkers = [];
+    for (let i = 0; i < numWorkers; i++) {
+      const worker = new WorkerPromise(`fft-worker-${i}`, state);
+      state.workers.push(worker);
+      initWorkers.push(worker.init(wasm));
+    }
+    await Promise.all(initWorkers);
   }
-  await Promise.all(initWorkers);
 }
-
-// let playing = false;
-// let audioBytes = null;
-// let audioProgressZeroOne = 0;
-// let progressSampleTime = 0;
-// let audioDuration = 0;
-// let audioStatusPoll;
-// let playheadWasInRangeWhenPlaybackStarted = false;
-
-
-
 const getAudioObject = (fileBytes) => {
   const audioBytes = new ArrayBuffer(fileBytes.byteLength);
   new Uint8Array(audioBytes).set(new Uint8Array(fileBytes));
   return URL.createObjectURL(new Blob([audioBytes], { type: "audio/wav" }));
 };
-export const initSpectrogram = async (filePath) => {
+
+/**
+ *
+ * @param filePath {string}
+ * @param [previousState] {{ workers: WorkerPromise[], offlineAudioContext: OfflineAudioContext }}
+ * @returns {Promise<{renderToContext: ((function(CanvasRenderingContext2D, CanvasRenderingContext2D, number, number, number, number, boolean): Promise<*>)|*), audioFileUrl: string, renderRange: (function(number, number, number, boolean): Promise<T>), numAudioSamples: number, terminate: terminate, invalidateCanvasCaches: invalidateCanvasCaches}>}
+ */
+export const initSpectrogram = async (filePath, previousState) => {
   const state = {
-    floatData: undefined,
     sharedFloatData: undefined,
-    sharedOutputData,
+    sharedOutputData: undefined,
     prevLeft: undefined,
     prevRight: undefined,
     max: undefined,
@@ -53,215 +43,375 @@ export const initSpectrogram = async (filePath) => {
     canvasWidth: 0,
     pendingRender: {
       complete: true,
-    }
+    },
+    ctxs: (previousState && previousState.ctxs) || new Map(),
+    firstRender: true,
+    colorMap: 4,
+    cropAmountTop: 0,
+    cropAmountBottom: 0,
+    workers: (previousState && previousState.workers) || [],
   };
-
-  await initWorkers();
+  await initWorkers(state);
   const fileBytes = await (await fetch(filePath)).arrayBuffer();
   const audioFileUrl = getAudioObject(fileBytes);
-  // Copy the audio for playback - ideally do this only if playback is requested
-  const audioContext = new OfflineAudioContext({
-    length: 1024*1024,
+  const audioContext = (previousState && previousState.offlineAudioContext) || new OfflineAudioContext({
+    length: 1024 * 1024,
+    numberOfChannels: 1,
     sampleRate: 48000,
   });
   const wavData = await audioContext.decodeAudioData(fileBytes);
-  state.floatData = wavData.getChannelData(0);
-  // What's the max zoom?
-  // Let's say it's FFT_WIDTH per pixel.
+  const floatData = wavData.getChannelData(0);
+  // Sometimes we get malformed files that end in zeros – we want to truncate these.
+  let actualEnd = floatData.length;
+  for (let i = floatData.length - 1; i > -1; i--) {
+    if (floatData[i] !== 0) {
+      actualEnd = i;
+      break;
+    }
+  }
+  const actualFloatData = floatData.subarray(0, actualEnd);
 
-  let f = (state.floatData.length / numWorkers);
-  let g = f + (FFT_WIDTH - (f % FFT_WIDTH));
-  let k = g * numWorkers;
-  state.sharedFloatData = new Float32Array(new SharedArrayBuffer(k * 4));
-  state.sharedFloatData.set(state.floatData, 0);
+  if (USE_SHARED_ARRAY_BUFFER && window.SharedArrayBuffer) {
+    state.sharedFloatData = new Float32Array(
+      new SharedArrayBuffer(actualFloatData.byteLength)
+    );
+    state.sharedFloatData.set(actualFloatData, 0);
+  } else {
+    state.sharedFloatData = actualFloatData;
+  }
 
   const invalidateCanvasCaches = () => {
+    console.log("invalidate caches");
     state.imageDatas = [];
     state.pendingRender.complete = true;
     state.max = undefined;
-  }
+  };
+
+  const unloadAudio = () => {
+    URL.revokeObjectURL(audioFileUrl);
+  };
+
+  const terminateWorkers = (state) => {
+    for (const worker of state.workers) {
+      worker.terminate();
+    }
+  };
 
   return {
     renderRange: renderRange(state),
     renderToContext: renderToContext(state),
     audioFileUrl,
-    numAudioSamples: state.floatData.length,
-    invalidateCanvasCaches
+    numAudioSamples: actualFloatData.length,
+    invalidateCanvasCaches,
+    cyclePalette: () => cyclePalette(state),
+    unloadAudio,
+    terminateWorkers: () => terminateWorkers(state),
+    persistentSpectrogramState: { workers: state.workers, offlineAudioContext: audioContext, ctxs: state.ctxs }
   };
 };
 
-const renderRange = (state) => async (startZeroOne, endZeroOne, renderWidth, force) => {
-  return new Promise((resolve) => {
-    if (force || startZeroOne !== state.prevLeft || endZeroOne !== state.prevRight || renderWidth !== state.canvasWidth) {
-      const length = state.floatData.length;
-      // NOTE: Round the start/end UP to a multiple of FFT window size, then clip that extra bit off when rendering.
-      // We need to move along 0.5 (it seems) window lengths for things to line up correctly.
-      const startSample = Math.floor(length * startZeroOne) + (FFT_WIDTH * 0.5);
-      // NOTE: We can go past endSample, because we've extended the sharedFloatBuffer with additional padding.
-      const endSample = Math.ceil(length * endZeroOne) + (FFT_WIDTH * 0.5);
+const drawImage = (state, ctx) => {
+  if (ctx && !state.ctxs.get(ctx)) {
+    state.ctxs.set(ctx, init(ctx));
+  }
+  return state.ctxs.get(ctx).drawImage;
+};
+const submitTexture = (state, ctx) => {
+  if (ctx && !state.ctxs.get(ctx)) {
+    state.ctxs.set(ctx, init(ctx));
+  }
+  return state.ctxs.get(ctx).submitTexture;
+};
 
-      // Kick off this render of the full visible region at optimal resolution, as long as it's not already processing.
-      // Once ready, stretch it as best we can to the visible region.
-      if (state.pendingRender.complete || force) {
-        state.pendingRender.complete = false;
-        // Kick off a render at the current zoom level.
-        renderArrayBuffer(state, renderWidth, startZeroOne, endZeroOne, startSample, endSample).then(() => {
-          // console.log("Got rendered range", startZeroOne, endZeroOne);
-          state.prevLeft = startZeroOne;
-          state.canvasWidth = renderWidth;
-          state.prevRight = endZeroOne;
-          state.pendingRender.complete = true;
+// VIRIDIS,
+//   PLASMA,
+//   INFERNO,
+//   MAGMA,
+//   GRAYSCALE,
+//   GRAYSCALE_SQUARED,
+//   GRAYSCALE_INVERTED,
+//   GRAYSCALE_SQUARED_INVERTED
+
+const colorMaps = ["Viridis", "Plasma", "Inferno", "Magma", "Grayscale"]
+const cyclePalette = (state) => {
+  state.colorMap++;
+  if (state.colorMap === colorMaps.length) {
+    state.colorMap = 0;
+  }
+  return colorMaps[state.colorMap];
+};
+
+/**
+ *
+ * @param state
+ * @returns {function(number, number, number, boolean): Promise<T>}
+ */
+const renderRange =
+  (state) => async (startZeroOne, endZeroOne, renderWidth, force) => {
+
+  // NOTE: Min width for renders, so that narrow viewports don't get overly blurry images when zoomed in.
+  renderWidth = Math.max(1920, renderWidth);
+    if (startZeroOne === 0 && endZeroOne === 1) {
+      if (state.imageDatas.length) {
+        // We've already rendered the fully zoomed out version, no need to re-render
+        return new Promise((resolve) => resolve());
+      }
+    }
+    return new Promise((resolve) => {
+      if (
+        force ||
+        startZeroOne !== state.prevLeft ||
+        endZeroOne !== state.prevRight ||
+        renderWidth !== state.canvasWidth
+      ) {
+        // Kick off this render of the full visible region at optimal resolution, as long as it's not already processing.
+        // Once ready, stretch it as best we can to the visible region.
+        if (state.pendingRender.complete || force) {
+          state.pendingRender.complete = false;
+          // Kick off a render at the current zoom level.
+          const length = state.sharedFloatData.length;
+          const startSample = Math.floor(length * startZeroOne);
+          const endSample = Math.min(length, Math.ceil(length * endZeroOne));
+
+          renderArrayBuffer(
+            state,
+            renderWidth,
+            startZeroOne,
+            endZeroOne,
+            startSample,
+            endSample
+          ).then((s) => {
+            state.prevLeft = startZeroOne;
+            state.canvasWidth = renderWidth;
+            state.prevRight = endZeroOne;
+            state.pendingRender.complete = true;
+            resolve(s);
+          });
+        } else {
           resolve();
-        });
-
+        }
       } else {
         resolve();
-        // Else, use the best composite of existing renders to stretch to the visible region.
-        //await renderToContext(state, ctx, startZeroOne, endZeroOne);
-        //state.progressSampleTime = performance.now();
-        //updatePlayhead(state, ctx, miniMapCtx, playheadCanvasCtx, playheadScrubber, mainPlayheadCanvasCtx, mainPlayheadScrubber);
       }
-    }
-  });
-};
+    });
+  };
 
-const renderToContext = (state) => async (ctx, startZeroOne, endZeroOne) => {
-  //debugger;
-  // Figure out the best intermediate render to stretch.
-  // Do we store the final coloured imagedata to stretch, or the FFT array data?
-  //console.log("Render to context", startZeroOne, endZeroOne);
-  const fullRange = state.imageDatas[0];
-  //console.log(imageDatas);
-  let bestMatch = null;
-  let exactMatch = false;
-  for (let i = 0; i < state.imageDatas.length; i++) {
-    // Find the best match for the range
-    let data = state.imageDatas[i];
-    if (bestMatch) {
-      const dStart = startZeroOne - data.startZeroOne;
-      const bmStart = startZeroOne - bestMatch.startZeroOne;
-      const dEnd = data.endZeroOne - endZeroOne;
-      const bmEnd = bestMatch.endZeroOne - endZeroOne;
-      if (dStart < bmStart && dEnd < bmEnd) {
+const renderToContext =
+  (state) =>
+  async (
+    ctx,
+    overlayCtx,
+    transformY,
+    startZeroOne,
+    endZeroOne,
+    top,
+    bottom,
+    isMainCtx,
+    isDarkTheme = true
+  ) => {
+    // Figure out the best intermediate render to stretch.
+    // Do we store the final coloured imagedata to stretch, or the FFT array data?
+
+    // Set best match to the full zoomed out range, then look for a better match
+    let bestMatch = state.imageDatas[0];
+    let exactMatch = false;
+    let cropLeft = startZeroOne;
+    let cropRight = endZeroOne;
+
+    // Look first for an exact match.
+    for (let i = 1; i < state.imageDatas.length; i++) {
+      const data = state.imageDatas[i];
+      if (
+        data.startZeroOne === startZeroOne &&
+        data.endZeroOne === endZeroOne
+      ) {
+        cropLeft = 0;
+        cropRight = 1;
+        // An exact match
+        exactMatch = true;
         bestMatch = data;
+        break;
       }
-      // We can take something *more* zoomed out, and use that
-    } else {
-      bestMatch = fullRange;
     }
-    if (data.startZeroOne === startZeroOne && data.endZeroOne === endZeroOne) {
-      // An exact match
-      exactMatch = true;
-      bestMatch = data;
-      break;
+    if (!exactMatch) {
+      // Work out whether we're zooming out or in relative to the prev frame, or panning.
+      if (state.imageDatas.length === 2) {
+        let zoomingIn = false;
+        // Look for a more zoomed out match
+        for (let i = 1; i < state.imageDatas.length; i++) {
+          const data = state.imageDatas[i];
+          if (data.startZeroOne < startZeroOne && data.endZeroOne > endZeroOne) {
+            zoomingIn = true;
+            // Work out what proportion of the more zoomed out image we want.
+            cropLeft = mapRange(
+              startZeroOne,
+              data.startZeroOne,
+              data.endZeroOne,
+              0,
+              1
+            );
+            cropRight = mapRange(
+              endZeroOne,
+              data.startZeroOne,
+              data.endZeroOne,
+              0,
+              1
+            );
+            bestMatch = data;
+            break;
+          }
+        }
+
+        if (!zoomingIn) {
+          // If zooming out, or panning, synthesise a new image
+          const prevImage = state.imageDatas[1];
+          const range = endZeroOne - startZeroOne;
+          const imageRange = prevImage.endZeroOne - prevImage.startZeroOne;
+          const diff = Math.abs(range - imageRange);
+          if (diff > 0.000000000001) {
+            // "Zooming out"
+            // TODO
+          } else {
+            // "Panning"
+            // TODO
+            // Paste together the relevant bits of each image.  Best to do this in the shader, so we'd pass two
+            // textures, and the various offsets of each, maybe with a feather at the edges
+          }
+        }
+      }
     }
-  }
-  //console.log(bestMatch);
-  if (bestMatch && exactMatch) {
-    //console.log("Exact match", startZeroOne, endZeroOne, bestMatch);
-    // //const bitmap = await createImageBitmap(new ImageData(imageData, WIDTH, HEIGHT), 0, 0, WIDTH, Math.round((HEIGHT / 3) * 2), {resizeQuality: "high"});
+    const bitmap = bestMatch;
+    if (bitmap) {
+      const end = cropLeft + (cropRight - cropLeft);
 
-    //const sX = fullRange.width * startZeroOne; //(1/fullRange.r)
-    const sW = bestMatch.width;//(bestMatch.width * bestMatch.r); //* (1/fullRange.r)
-    const bitmap = await createImageBitmap(
-      new ImageData(bestMatch.imageData, bestMatch.width, bestMatch.height), 0, 0, sW, Math.round((bestMatch.height / 3) * 2), {
-        resizeQuality: "high",
-        resizeWidth: ctx.canvas.width,
-        resizeHeight: ctx.canvas.height
-      });
-    ctx.drawImage(bitmap, 0, 0);
-  } else if (bestMatch) {
-    //console.log("best match", bestMatch, startZeroOne, endZeroOne);
-    const sX = fullRange.width * startZeroOne; //(1/fullRange.r)
-    const sW = (fullRange.width  * endZeroOne) - sX; //* (1/fullRange.r)
-    const bitmap = await createImageBitmap(
-      new ImageData(fullRange.imageData, fullRange.width, fullRange.height), sX, 0, sW, Math.round((fullRange.height / 3) * 2), {
-        resizeQuality: "high",
-        resizeWidth: ctx.canvas.width,
-        resizeHeight: ctx.canvas.height
-      });
-    ctx.drawImage(bitmap, 0, 0);
+      const bitmapIndex = bitmap.startZeroOne === 0 && bitmap.endZeroOne === 1 ? 0 : 1;
 
+      // If range is 0..1
+      bitmap.submitted = bitmap.submitted || new Map();
+      if (!bitmap.submitted.has(ctx)) {
+        submitTexture(state, ctx)(bitmapIndex, bitmap.imageData, bitmap.width, bitmap.height);
+        bitmap.submitted.set(ctx, true);
+      }
+      drawImage(state, ctx)(
+        bitmapIndex,
+        bitmap.normalizationScale,
+        cropLeft,
+        end,
+        top,
+        bottom,
+        state.cropAmountTop,
+        state.cropAmountBottom,
+        state.colorMap
+      );
 
-    // Zoom in on the part of the bitmap we care about.
-    // const bitmap = await createImageBitmap(new ImageData(
-    //   bestMatch.imageData,
-    //   bestMatch.width,
-    //   bestMatch.height,
-    // ),
-    //   0,
-    //   0,
-    //   bestMatch.width,
-    //   Math.round((bestMatch.height / 3) * 2),
-    //   {resizeQuality: "high", resizeWidth: ctx.canvas.width, resizeHeight: ctx.canvas.height }
-    // );
-    // ctx.drawImage(bitmap, 0, 0);
-    //console.log("No exact match, skipping frame");
-  }
-  return state;
-};
-//let py;
-const render = (max, sharedOutputData, width, HEIGHT, r) => {
-  //console.log(width, HEIGHT);
+      if (isMainCtx) {
+        overlayCtx.clearRect(
+          0,
+          0,
+          overlayCtx.canvas.width,
+          overlayCtx.canvas.height
+        );
+        overlayCtx.save();
+        ctx.canvas.dispatchEvent(
+          new CustomEvent("render", {
+            bubbles: true,
+            composed: true,
+            detail: {
+              range: {
+                begin: startZeroOne,
+                end: endZeroOne,
+                min: bottom,
+                max: top,
+              },
+              sampleRate: state.actualSampleRate,
+              duration: state.sharedFloatData.length / 48000,
+              context: overlayCtx,
+            },
+          })
+        );
 
-  // FIXME: Does this actually need to be the height of the full FFT data, or could it just
-  //  be the height of the imageData?  I guess we're rendering it at full frequency resolution,
-  //  and then can easily just re-render to the imageData it we want to accentuate a particular range?
-  //if (!frameBufferView) {
-    // FIXME: Resize
-  const frameBufferView = new Uint32Array(width * HEIGHT);
-  //}
-  let scale = 1.0 / max; // Put all the values into 0..1 range
-  //let img_len_used = HEIGHT;
-  let half_chunk_len = HEIGHT;
-  let j = 0;
+        overlayCtx.restore();
+        overlayCtx.save();
+        if (true) {
+          // TODO: Only redraw overlay when things change.  Maybe separate user-overlay from spectastiq overlay.
+          //  Maybe try and update overlay in parallel on offline canvas?
+          //performance.mark("overlayS");
+          state.textMeasurementCache = state.textMeasurementCache || {};
+          const maxFreq = state.actualSampleRate / 2;
+          const pixelRatio = window.devicePixelRatio;
+          overlayCtx.font = `${10 * pixelRatio}px sans-serif`;
+          let prevY = -100;
 
-  //console.log(sharedOutputData.byteLength, sharedFloatData.byteLength, frameBufferView.byteLength);
-
-  // if (!py) {
-  //   py = new Float32Array(HEIGHT);
-  //   for (let y = 0; y< HEIGHT; y++) {
-  //     let p = y / HEIGHT;
-  //     let freq = p * img_len_used;
-  //     let offset = Math.min(freq, HEIGHT);
-  //     py[y] = offset;
-  //   }
-  // }
-  // const cutoff = 1024/3;
-  //console.log(cutoff);
-  for (let y = 340; y < HEIGHT; y++) {
-    // let p = y / HEIGHT;
-    // let freq = p * img_len_used;
-    // console.log(y, p, freq);
-    // if (freq < cutoff) { // Crop off frequency
-    //   continue;
-    // }
-    // TODO(jon): Maybe rather than resampling the input audio after its decoded (slow on FF), we just crop the
-    //  audio when rendering?  Of course then FFT is going to be slower, since there are more samples.
-    //let offset = py[y];//Math.min(freq, HEIGHT);
-    for (let x = 0; x < width; x++) {
-      const index = (x * half_chunk_len) + y;
-      let val = sharedOutputData[index];
-      val = val * scale; // Move into 0..1 range
-      // For regular rendering
-      val = val * val * val;
-      //val = val * val * val * val * val * val;
-
-      // NOTE: There's no reason not to have a deeper colour ramp range than 255 here.
-      frameBufferView[j] = colourMap[(val * 255) | 0];
-      j++;
+          // TODO: Try and divide evenly so that max freq appears as a label?
+          //console.log(maxFreq);
+          const divisions = Math.ceil(maxFreq / 1000) + 1;
+          const divisionColor = isDarkTheme ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)";
+          const textColor = isDarkTheme ? "rgba(255, 255, 255, 0.85)" : "rgba(0, 0, 0, 0.85)";
+          for (let i = 0; i <= divisions; i++) {
+            overlayCtx.beginPath();
+            overlayCtx.strokeStyle = divisionColor;
+            overlayCtx.lineWidth = 1;
+            const yy = i / divisions;
+            const yyy = transformY(1 - yy);
+            let y = ((1 - yyy) * overlayCtx.canvas.height) / pixelRatio;
+            if (y - prevY > 15) {
+              overlayCtx.strokeRect(
+                0,
+                y * pixelRatio,
+                overlayCtx.canvas.width,
+                0
+              );
+              overlayCtx.fillStyle = textColor;
+              overlayCtx.textAlign = "right";
+              overlayCtx.textBaseline = "middle";
+              const thisFrequency = Math.round((1 - yy) * maxFreq) / 1000;
+              const label = `${thisFrequency
+                .toFixed(1)
+                .toLocaleString()} kHz`;
+              // NOTE: Measure text takes a fair bit on time on chrome on lower powered android devices; cache measurements.
+              const cacheKey = `${label}_${pixelRatio}`;
+              const textHeight = state.textMeasurementCache[cacheKey] || overlayCtx.measureText(label).actualBoundingBoxAscent;
+              state.textMeasurementCache[cacheKey]  = textHeight;
+              const overshootTop = y - ((textHeight + (5 * pixelRatio)) * 0.5);
+              const overshootBottom = y + ((textHeight + (5 * pixelRatio)) * 0.5);
+              const overshotTop = overshootTop <= 0;
+              const overshotBottom = overshootBottom >= overlayCtx.canvas.height / pixelRatio;
+              if (overshotBottom) {
+                overlayCtx.textBaseline = "bottom";
+              }
+              else if (overshotTop) {
+                overlayCtx.textBaseline = "top";
+                y += (2 * pixelRatio);
+              }
+              // overlayCtx.fillText(
+              //   label,
+              //   overlayCtx.canvas.width - 4,
+              //   y * pixelRatio
+              // );
+              prevY = y;
+            }
+          }
+          // performance.mark("overlayE");
+          // performance.measure("overlay", "overlayS", "overlayE");
+        }
+        overlayCtx.restore();
+      }
+      return state;
     }
-  }
-  return new Uint8ClampedArray(frameBufferView.buffer);
-}
+  };
 
-// Is it worth denoising the output?
-// Can we do things in a glsl shader?
 class WorkerPromise {
   constructor(name) {
     this.name = name;
-    this.worker = new Worker("./spectastiq-worker.js", {type: "module", credentials: "include"});
-    this.worker.onmessage = ({data}) => {
+    this.worker = new Worker(
+      new URL("./spectastiq-worker.js", import.meta.url),
+      { type: "module", credentials: "include" }
+    );
+    this.worker.onmessage = ({ data }) => {
+      if ((!USE_SHARED_ARRAY_BUFFER || !window.SharedArrayBuffer) && data.output) {
+        // Copy outputs back to state.sharedOutputData in the correct offsets
+        this.output.subarray(data.offsets.outStart, data.offsets.outEnd).set(data.output, 0);
+      }
       // Resolve;
       this.work[data.id](data);
       delete this.work[data.id];
@@ -270,26 +420,43 @@ class WorkerPromise {
     this.id = 0;
   }
 
-  doWork(data) {
+  doWork(data, output) {
+    if (output) {
+      this.output = output;
+    }
     return new Promise((resolve, reject) => {
       const jobId = this.id;
       this.id++;
       this.work[jobId] = resolve;
-      this.worker.postMessage({id: jobId, ...data});
+      const message = {id: jobId, ...data};
+      try {
+        this.worker.postMessage(message);
+      } catch (e) {
+        console.warn(e);
+      }
     });
   }
 
   init(wasm) {
     return this.doWork({
       type: "Init",
-      wasm
+      name: this.name,
+      wasm,
     });
+  }
+  terminate() {
+    this.worker.terminate();
   }
 }
 const resampleAudioBuffer = async (audioBuffer, targetSampleRate) => {
   return new Promise((resolve, reject) => {
-    const numFrames = audioBuffer.length * targetSampleRate / audioBuffer.sampleRate;
-    const offlineContext = new OfflineAudioContext(audioBuffer.numberOfChannels, numFrames, targetSampleRate);
+    const numFrames =
+      (audioBuffer.length * targetSampleRate) / audioBuffer.sampleRate;
+    const offlineContext = new OfflineAudioContext(
+      audioBuffer.numberOfChannels,
+      numFrames,
+      targetSampleRate
+    );
     const bufferSource = offlineContext.createBufferSource();
     bufferSource.buffer = audioBuffer;
     offlineContext.oncomplete = (event) => resolve(event.renderedBuffer);
@@ -298,107 +465,138 @@ const resampleAudioBuffer = async (audioBuffer, targetSampleRate) => {
     offlineContext.startRendering();
   });
 };
-async function renderArrayBuffer(state, canvasWidth, startZeroOne, endZeroOne, startSample, endSample) {
+
+async function renderArrayBuffer(
+  state,
+  canvasWidth,
+  startZeroOne,
+  endZeroOne,
+  startSample,
+  endSample
+) {
   const widthChanged = canvasWidth !== state.canvasWidth;
+  const start = performance.now();
+
+  const numChunks = numWorkers;
+  const canvasChunkWidth = Math.ceil(canvasWidth / numChunks);
+
   if (!state.sharedOutputData || widthChanged) {
     if (!state.sharedOutputData || canvasWidth > state.canvasWidth) {
       // Realloc on resize
-
-      state.sharedOutputData = new Float32Array(new SharedArrayBuffer(canvasWidth * 4 * HEIGHT));
+      if (USE_SHARED_ARRAY_BUFFER && window.SharedArrayBuffer) {
+        state.sharedOutputData = new Float32Array(
+          new SharedArrayBuffer(canvasChunkWidth * numChunks * 4 * HEIGHT)
+        );
+      } else {
+        state.sharedOutputData = new Float32Array(
+          new ArrayBuffer(canvasChunkWidth * numChunks * 4 * HEIGHT)
+        );
+      }
     }
   }
-  let length = endSample - startSample;
-  const numChunks = 1;//numWorkers;
-  let cLength = length / numChunks;
-  let paddedChunkLength = (cLength + (FFT_WIDTH - (cLength % FFT_WIDTH)));
-  const r = (length / (paddedChunkLength * numChunks));
-  //console.log("Chunk length", chunkLength, chunkLength % 2048);
-  // Init workers:
-  // Find an amount of overlap between chunks that works?
+
+  const audioChunkLength = Math.ceil((endSample - startSample) / numChunks);
+  const canvasChunkLength = canvasChunkWidth * (FFT_WIDTH / 2);
   const job = [];
-  //console.log("Workers", numWorkers, "chunks", numChunks, sharedFloatData.length / chunkLength);
+  let chunk = 0;
+  let chunkStart = startSample;
+  let outStart = 0;
+  while (chunkStart < endSample) {
+    const chunkEnd = Math.min(chunkStart + audioChunkLength, endSample);
+    const outEnd = Math.min(
+      outStart + canvasChunkLength,
+      state.sharedOutputData.length
+    );
 
-
-  // TODO: This should be proportionate to sharedOutputData in length, and then we should render R percentage of it.
-  //sharedOutputData = new Float32Array(new SharedArrayBuffer(Math.ceil(WIDTH * (1 / r)) * 4 * HEIGHT));
-
-  for (let chunk = 0; chunk < numChunks; chunk++) {
-    const start = startSample + chunk * paddedChunkLength;
-    const end = start + paddedChunkLength;
-    // HMM, this might actually be quite a bit slower than just slicing up a single array?
-    //const sharedOutputData = new Float32Array(new SharedArrayBuffer(Math.ceil(width / numChunks) * 2048 * 4));
-    const chunkLen = Math.ceil(canvasWidth / numChunks) * (FFT_WIDTH / 2);
-    //console.log("Chunk LEN", chunkLen, (WIDTH / numChunks) * 1024);
-    const start2 = chunk * chunkLen;
-    const end2 = (chunk * chunkLen) + chunkLen;
-
-    //console.log(chunk, start, end, (end - start) / 2048);
-
-    //console.log(start2, end2);
-    // TODO(jon): We may want the different slices of audio to overlap, in which case some copying may
-    // be necessary.  Maybe we can just copy the overlapping piece though?
-    //console.log("chunk", chunk, end - start, chunkLength);
-    //console.log("chunk", chunk, end2 - start2, chunkLen);
-    // console.assert(end <= sharedFloatData.length);
-    // console.assert(end - start === chunkLength);
-    // console.assert(chunkLength % 2048 === 0);
-
-    //console.log(start2, end2, sharedOutputData.length);
-    // NOTE(jon): Copy previous 2048 samples as separate cloned array to go at start.
-
-    const preludeStart = Math.max(0, start - FFT_WIDTH);
-    const preludeEnd = Math.min(preludeStart + FFT_WIDTH, start);
-
-    // console.log("Chunk ", chunk, start, end, chunkLen, "prelude", preludeStart, preludeEnd);
-    // console.log("Chunk ", chunk, "dest", start2, Math.min(end2, sharedOutputData.length));
-    // if (end2 > sharedOutputData.length) {
-    //   //debugger;
-    // }
-    // console.log("c len", end - start);
-    job.push(workers[chunk].doWork({
+    // Pass in 1 FFT window width as the prelude, so that we don't get a period of no output at the beginning of the slice
+    const preludeStart = Math.max(0, chunkStart - FFT_WIDTH);
+    const preludeEnd = Math.min(preludeStart + FFT_WIDTH, chunkStart);
+    const work = {
       type: "Process",
-      data: state.sharedFloatData.subarray(start, end),
-      prelude: state.sharedFloatData.slice(preludeStart, preludeEnd),
-      output: state.sharedOutputData.subarray(start2, Math.min(end2, state.sharedOutputData.length))
-    }));
+      data: state.sharedFloatData.subarray(chunkStart, chunkEnd),
+      prelude: state.sharedFloatData.subarray(preludeStart, preludeEnd),
+      offsets: {outStart, outEnd}
+    };
+    if (USE_SHARED_ARRAY_BUFFER && window.SharedArrayBuffer) {
+      work.output = state.sharedOutputData.subarray(outStart, outEnd);
+    }
+    job.push(
+      state.workers[chunk].doWork(work, state.sharedOutputData)
+    );
+    chunk++;
+    outStart += canvasChunkLength;
+    chunkStart += audioChunkLength;
   }
-  //console.log("Dispatching work", performance.now() - sss);
-
   // NOTE(jon): Interestingly, if we support streaming the audio in,
   //  we don't know what the maxes are ahead of time...
-
   // NOTE: Maxes are what we use to normalise on.
 
   // FIXME - Only grab the maxes once, at startup? It's possible there are smaller sounds that aren't captured at that zoom
   //  level, and the max may need to be adjusted though.
-  const maxes = await Promise.all(job);
-  if (!state.max) {
-    state.max = Math.max(...maxes.map(({max}) => max));
-  }
-  //console.log("MAX", max);
-  //max -= 1;
-  //console.log("FFt", performance.now() - sss);
+  const results = await Promise.all(job);
 
-  // Cacophony audio, resample, remove noise floor, normalise?
-  // NOTE(jon): So for one minute recording at 1440 wide, that's actually already "Full resolution" of the audio...
-  // So at that point, a better thing to do is probably just change the y scaling...
-  //const renderTime = performance.now();
-  // console.log(sharedFloatData.length, floatData.length, sharedOutputData.length);
-  // console.log(floatData.length / sharedFloatData.length);
-  // console.log((1/r) * sharedFloatData.length);
-  // console.log("e vs actual", actualEnd, sharedOutputData.length);
-  //console.log("w,h", WIDTH, HEIGHT);
-  let width = Math.ceil(canvasWidth * r);
-  //imageDatas.push({startZeroOne, endZeroOne, imageData: render(max, sharedOutputData, width, HEIGHT, r), r, width, height: HEIGHT});
+  const timings = document.getElementById("timings");
+  if (false && timings) {
+    state.timings = state.timings || [];
+    state.totalTimings = state.totalTimings || [];
+    state.timings.push(...results.map(({ time }) => time));
+    state.totalTimings.push(performance.now() - start);
+    timings.innerText = `Wasm took ${
+      state.timings[state.timings.length - 1]
+    } avg (${
+      state.timings.reduce((prev, curr) => {
+        return prev + curr;
+      }, 0) / state.timings.length
+    }), total: ${state.totalTimings[state.totalTimings.length - 1]}, avg (${
+      state.totalTimings.reduce((prev, curr) => {
+        return prev + curr;
+      }, 0) / state.totalTimings.length
+    })`;
+  }
+  if (!state.max) {
+    state.max = Math.max(...results.map(({ max }) => max));
+  }
+  if (state.firstRender) {
+    // Work out the actual clipping
+    state.firstRender = false;
+    // NOTE: Try to find the actual sample rate of the audio if it's been resampled.
+    const sliceLen = FFT_WIDTH / 2;
+    const negs = [];
+    for (
+      let j = sliceLen * 100;
+      j < state.sharedOutputData.length;
+      j += sliceLen
+    ) {
+      const slice = state.sharedOutputData.slice(j, j + sliceLen);
+      for (let i = slice.length - 1; i > -1; i--) {
+        // TODO: May need to tune this threshold for very quiet audio files?
+        if (slice[i] > 10000) {
+          negs.push(i);
+          break;
+        }
+      }
+    }
+    negs.sort();
+    const clip = Math.min(negs[Math.floor(negs.length / 2)], FFT_WIDTH / 2);
+    state.actualSampleRate = (((clip - 1) * 48000) / FFT_WIDTH) * 2;
+    console.log(
+      `Actual audio file response ${Math.round(state.actualSampleRate)}Khz`
+    );
+    state.cropAmountTop = 1 - clip / (FFT_WIDTH / 2);
+    // TODO: Crop off noise floor?
+  }
   const nextImageData = {
     startZeroOne,
     endZeroOne,
-    imageData: render(state.max, state.sharedOutputData, width, HEIGHT, r),
-    r,
-    width,
-    height: HEIGHT
+    imageData: new Float32Array(state.sharedOutputData),
+    normalizationScale: state.max,
+    width: HEIGHT,
+    height: canvasChunkWidth * numChunks,
   };
 
+  // Let's keep the fullRange, and then double-buffer between two others?
+  // If we draw to the webgl buffer, I guess we're going to want to keep float32arrays around instead?
+  // Meh, same size, and then we can mix and match slices? Maybe we want to do the webgl thing sooner rather than later.
   if (state.imageDatas.length === 0) {
     state.imageDatas = [nextImageData];
   } else if (state.imageDatas.length === 1) {
@@ -406,13 +604,8 @@ async function renderArrayBuffer(state, canvasWidth, startZeroOne, endZeroOne, s
   } else {
     state.imageDatas[1] = nextImageData;
   }
-  //await renderFrame(ctx, sharedOutputData.subarray(0, sharedOutputData.length), max);
-  // console.log("Rendering total", performance.now() - renderTime);
-  // console.log("Rendering + FFT", performance.now() - sss);
-  // TODO(jon): Make a render context/instance, and have a double-buffered scratch buffer there, for rendering
-  //  from the current frame, and interpolating until we get the next frame.  Also, we want a giant buffer of different slices
-  //  for use at various zoom levels.
-
-  // TODO(jon): Seems like this render step could be faster if done in a webgl shader?
-  // TODO(jon): Unnecessary memory copying of these arrays happening here:
+  return {
+    actualSampleRate: state.actualSampleRate,
+    cropAmountTop: state.cropAmountTop,
+  };
 }

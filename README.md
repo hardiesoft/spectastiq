@@ -9,7 +9,7 @@ An interactive spectrogram renderer and audio player, optimised for touch device
 <spectastiq-viewer src="/path/to/audio/my-audio-file.wav"></spectastiq-viewer>
 ```
 
-That's it!  *Spectastiq* will try to fit itself to the parent HTML element of the `<spectastic-viewer>` tag.
+That's it!  *Spectastiq* will try to fit itself to the parent HTML element of the `<spectastiq-viewer>` tag.
 
 Try [the example](https://hardiesoft.com/spectastiq/):
 
