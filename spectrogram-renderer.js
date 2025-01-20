@@ -503,9 +503,11 @@ async function renderArrayBuffer(
     outStart += canvasChunkLength;
     chunkStart += audioChunkLength;
   }
-  // NOTE(jon): Interestingly, if we support streaming the audio in,
+  // NOTE: Interestingly, if we support streaming the audio in,
   //  we don't know what the maxes are ahead of time...
   // NOTE: Maxes are what we use to normalise on.
+
+  // NOTE: We may *need* to support streaming audio chunks for longer audio clips?
 
   // FIXME - Only grab the maxes once, at startup? It's possible there are smaller sounds that aren't captured at that zoom
   //  level, and the max may need to be adjusted though.

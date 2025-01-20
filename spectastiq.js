@@ -24,8 +24,16 @@ template.innerHTML = `
     user-select: none;
     pointer-events: none; 
   }
+  #container.disabled {
+    touch-action: none;
+    user-select: none;
+    pointer-events: none; 
+  }
   #container.loading canvas {
     opacity: 0;
+  }
+  #container.disabled canvas {
+    opacity: 0.5;
   }
   #spectrogram-container {
     position: relative;
@@ -284,7 +292,6 @@ export default class Spectastiq extends HTMLElement {
   }
 
   loadSrc(src) {
-    const root = this.shadowRoot;
     const startTimeOffset = Number(this.getAttribute("start")) || 0;
     const endTimeOffset = Number(this.getAttribute("end")) || 1;
     const {
@@ -320,6 +327,7 @@ export default class Spectastiq extends HTMLElement {
         renderRange,
         renderToContext,
         audioFileUrl,
+        audioFloatData,
         numAudioSamples,
         invalidateCanvasCaches,
         unloadAudio,
@@ -435,6 +443,11 @@ export default class Spectastiq extends HTMLElement {
           const endZeroOne = timelineState.right;
           const top = timelineState.top;
           const bottom = timelineState.bottom;
+
+          if (this.deferredWidth && ctx.canvas.width !== this.deferredWidth) {
+            this.resizeCanvases(this.deferredWidth, true);
+          }
+
           drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
 
           //  FIXME: Doesn't play well with zoom to region of interest.
@@ -539,7 +552,7 @@ export default class Spectastiq extends HTMLElement {
       // Initial render
       this.render({ detail: { initialRender: true, force: true } });
       // TODO: Animate to region of interest could be replaced by reactive setting of :start :end props?
-      this.resizeCanvases();
+      this.resizeInited = true;
     })();
   }
 
@@ -573,7 +586,6 @@ export default class Spectastiq extends HTMLElement {
     const timelineUICanvas = root.getElementById("timeline-ui-canvas");
     this.loadingSpinner = root.getElementById("loading-spinner");
     const mainPlayheadCanvas = root.getElementById("main-playhead-canvas");
-    const audio = root.getElementById("audio");
     const playButton = root.getElementById("play-button");
 
     this.timelineElements = {
@@ -590,17 +602,22 @@ export default class Spectastiq extends HTMLElement {
     this.playerElements = {
       playheadCanvas,
       mainPlayheadCanvas,
-      audio,
       playButton,
       canvas,
       overlayCanvas,
       playheadCanvasCtx: playheadCanvas.getContext("2d"),
       mainPlayheadCanvasCtx: mainPlayheadCanvas.getContext("2d"),
     };
-    const resizeCanvas = (canvas, width, height) => {
+    const resizeCanvas = (canvas, width, height, forReal) => {
       canvas.style.height = `${height}px`;
-      canvas.height = height * devicePixelRatio;
-      canvas.width = width * devicePixelRatio;
+      // NOTE: Defer resizing the backing canvas until we actually want to draw to it, this makes resizes look better.
+      if (!this.resizeInited || forReal) {
+        canvas.height = height * devicePixelRatio;
+        canvas.width = width * devicePixelRatio;
+      } else {
+        this.deferredWidth = width;
+        this.deferredHeight = height;
+      }
       canvas.style.width = `${width}px`;
     };
     overlayCanvas.addEventListener("interaction-begin", () => {
@@ -752,21 +769,20 @@ export default class Spectastiq extends HTMLElement {
     this.resetYZoom = resetYZoom;
     this.requestRedraw = () => {};
 
-    this.resizeCanvases = (e) => {
-      const width = container.getBoundingClientRect().width;
-      resizeCanvas(this.timelineElements.canvas, width, 300);
-      resizeCanvas(this.timelineElements.overlayCanvas, width, 300);
-      resizeCanvas(this.timelineElements.userOverlayCanvas, 300);
+    this.resizeCanvases = (resizedWidth, forReal) => {
+      const width = resizedWidth || container.getBoundingClientRect().width;
+      resizeCanvas(this.timelineElements.canvas, width, 300, forReal);
+      resizeCanvas(this.timelineElements.overlayCanvas, width, 300, forReal);
+      resizeCanvas(this.timelineElements.userOverlayCanvas, width, 300, forReal);
 
-      resizeCanvas(this.timelineElements.mapCanvas, width, 60);
-      resizeCanvas(this.timelineElements.timelineUICanvas, width, 60);
+      resizeCanvas(this.timelineElements.mapCanvas, width, 60, forReal);
+      resizeCanvas(this.timelineElements.timelineUICanvas, width, 60, forReal);
 
-      resizeCanvas(this.playerElements.mainPlayheadCanvas, width, 300);
-      resizeCanvas(this.playerElements.playheadCanvas, width, 60);
+      resizeCanvas(this.playerElements.mainPlayheadCanvas, width, 300, forReal);
+      resizeCanvas(this.playerElements.playheadCanvas, width, 60, forReal);
 
-      const wasTriggeredByResizeEvent = !!e;
-      if (wasTriggeredByResizeEvent) {
-        console.log("Resizing canvases");
+      const wasTriggeredByResizeEvent = !!resizedWidth;
+      if (wasTriggeredByResizeEvent && !!this.resizeInited) {
         {
           const startZeroOne = timelineState.left;
           const endZeroOne = timelineState.right;
@@ -777,6 +793,7 @@ export default class Spectastiq extends HTMLElement {
           }
         }
         this.sharedState.interacting = true;
+        this.timelineElements.container.classList.add("disabled");
         clearTimeout(this.sharedState.interactionTimeout);
         this.sharedState.interactionTimeout = setTimeout(() => {
           this.invalidateCanvasCaches && this.invalidateCanvasCaches();
@@ -785,14 +802,17 @@ export default class Spectastiq extends HTMLElement {
           //  Probably makes no difference in this instance, since this is truly async via a worker.
           this.renderRange && this.renderRange(0, 1, canvas.width, true).then(() => {
             this.render({ detail: { initialRender: true, force: true } });
+            this.timelineElements.container.classList.remove("disabled");
           });
           this.sharedState.interacting = false;
         }, 300);
       }
     };
+    const resizeObserver = new ResizeObserver((entries) => {
+      this.resizeCanvases(entries[0].contentRect.width);
+    });
+    resizeObserver.observe(container);
 
-    // TODO: This should probably become a container query
-    window.addEventListener("resize", this.resizeCanvases);
     this.inited = true;
     // Initial attributeChangedCallback happens before connectedCallback, so need to load src after initial one-time setup.
     this.loadSrc(src);
