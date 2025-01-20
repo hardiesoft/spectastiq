@@ -587,6 +587,7 @@ export default class Spectastiq extends HTMLElement {
     this.loadingSpinner = root.getElementById("loading-spinner");
     const mainPlayheadCanvas = root.getElementById("main-playhead-canvas");
     const playButton = root.getElementById("play-button");
+    const audio = root.getElementById("audio");
 
     this.timelineElements = {
       mapCanvas,
@@ -604,6 +605,7 @@ export default class Spectastiq extends HTMLElement {
       mainPlayheadCanvas,
       playButton,
       canvas,
+      audio,
       overlayCanvas,
       playheadCanvasCtx: playheadCanvas.getContext("2d"),
       mainPlayheadCanvasCtx: mainPlayheadCanvas.getContext("2d"),
