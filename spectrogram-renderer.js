@@ -197,14 +197,10 @@ const renderToContext =
   (state) =>
   async (
     ctx,
-    overlayCtx,
-    userOverlayCtx,
-    transformY,
     startZeroOne,
     endZeroOne,
     top,
-    bottom,
-    isMainCtx,
+    bottom
   ) => {
     // Figure out the best intermediate render to stretch.
     // Do we store the final coloured imagedata to stretch, or the FFT array data?

@@ -394,25 +394,17 @@ export default class Spectastiq extends HTMLElement {
           drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
           renderToContext(
             ctx,
-            overlayCtx,
-            userOverlayCtx,
-            this.transformY,
             startZeroOne,
             endZeroOne,
             top,
-            bottom,
-            true
+            bottom
           );
           renderToContext(
             mapCtx,
-            mapCtx,
-            null, // userOverlayCtx
-            this.transformY,
             0,
             1,
             1,
-            0,
-            false
+            0
           );
           audioState.progressSampleTime = performance.now();
           updatePlayhead();
@@ -520,14 +512,10 @@ export default class Spectastiq extends HTMLElement {
           // Render the stretched version
           renderToContext(
             ctx,
-            overlayCtx,
-            userOverlayCtx,
-            this.transformY,
             startZeroOne,
             endZeroOne,
             top,
-            bottom,
-            true
+            bottom
           ).then((s) => {
             if (!!s) {
               this.shadowRoot.dispatchEvent(
@@ -551,14 +539,10 @@ export default class Spectastiq extends HTMLElement {
           if (initialRender) {
             renderToContext(
               mapCtx,
-              mapCtx,
-              null,
-              this.transformY,
               0,
               1,
               1,
-              0,
-              false
+              0
             );
           }
 
@@ -573,14 +557,10 @@ export default class Spectastiq extends HTMLElement {
                 if (initialRender) {
                   renderToContext(
                     mapCtx,
-                    mapCtx,
-                    null,
-                    this.transformY,
                     0,
                     1,
                     1,
-                    0,
-                    false
+                    0
                   ).then(() => {
                     if (this.loadingSpinner && this.loadingSpinner.parentElement) {
                       this.loadingSpinner.parentElement.removeChild(this.loadingSpinner);
@@ -602,14 +582,10 @@ export default class Spectastiq extends HTMLElement {
                 }
                 renderToContext(
                   ctx,
-                  overlayCtx,
-                  userOverlayCtx,
-                  this.transformY,
                   timelineState.left,
                   timelineState.right,
                   top,
-                  bottom,
-                  true
+                  bottom
                 ).then((s) => {
                   if (
                     initialRender &&
