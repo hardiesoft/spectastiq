@@ -14,6 +14,19 @@ That's it!  *Spectastiq* will try to fit itself to the parent HTML element of th
 
 Try [the example](https://hardiesoft.com/spectastiq/):
 
+## Building the Rust-based WASM FFT component
+
+You don't need to build the WASM FFT processing library to use this component – that's only required if you
+want to make changes to how the audio chunks are processed into frequency distribution data.
+
+If you do want to make changes:
+This project was build with Rust 1.84.0
+If you don't already have a Rust toolchain installed you'll need to do so using [rustup](https://rustup.rs/).
+Then you'll need [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/) to package things up.
+
+Once you've got those requirements installed, you can run `wasm-pack build --target web`, and the wasm and supporting
+files will appear in the `./pkg` folder.
+
 ## Advanced integrations
 
 TODO
@@ -29,7 +42,7 @@ To best support longer clips, it's necessary to serve *spectastiq* from a "secur
 set some headers on the files that your web-server delivers to your users. 
 This enables an advanced JavaScript feature called `SharedArrayBuffer`, which helps *spectastiq* to use all your 
 computers power to render spectrograms really fast, and also reduces memory usage which seems to otherwise trigger 
-browser bugs on resource-constrained mobile devices (Chrome Android on a cheap tablet triggered this).
+browser bugs on resource-constrained mobile devices (Chrome Android on a Lenovo Tab M10 with 3GB RAM triggered this).
 
 ### Acknowledgements
 

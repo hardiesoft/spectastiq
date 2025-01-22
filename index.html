@@ -62,7 +62,8 @@
     const buttons =  document.querySelectorAll('.src-button');
     buttons.forEach(button => {
       button.addEventListener('click', (e) => {
-        spectastiq.setAttribute("src", e.target.innerText.trim());
+        //spectastiq.setAttribute("src", e.target.innerText.trim());
+        spectastiq.src = e.target.innerText.trim();
       });
     });
   </script>

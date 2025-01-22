@@ -109,7 +109,7 @@ fn transform<'a>(
         *out = Complex::new(val * filter, 0.0);
     }
     fft.process_with_scratch(filtered_scratch, &mut scratch[..]);
-    // NOTE(jon): We only need half of the output, since it is mirrored.
+    // NOTE: We only need half of the output, since it is mirrored.
     let first_half = filtered_scratch.split_at((filtered_scratch.len() + 1) / 2).0;
     let mut max = 0.0;
     for (input, output) in first_half.iter().zip(result) {

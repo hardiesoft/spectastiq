@@ -257,6 +257,13 @@ export default class Spectastiq extends HTMLElement {
     this.terminateWorkers = null;
   }
 
+  get src() {
+    return this.getAttribute("src");
+  }
+  set src(newValue) {
+    this.setAttribute("src", newValue);
+  }
+
   unload() {
     this.terminateExistingState && this.terminateExistingState();
     this.terminateExistingState = null;
@@ -633,6 +640,7 @@ export default class Spectastiq extends HTMLElement {
     const root = this.shadowRoot;
     if (!this.inited) {
       root.appendChild(template.content.cloneNode(true));
+      console.log(root);
     }
     if (src && !this.inited) {
 

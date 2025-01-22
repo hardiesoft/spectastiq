@@ -1,5 +1,4 @@
 import {
-  MAGMA,
   VIRIDIS,
   PLASMA,
   INFERNO,
@@ -49,83 +48,7 @@ float map(float value, float min1, float max1, float min2, float max2) {
     return min2 + (value - min1) * (max2 - min2) / (max1 - min1);
 }
 
-float flip(float val) {
-    return 1.0 - val;
-}
-
-float square(float val) {
-    return val * val;
-}
-
-float cube(float val) {
-    return val * val * val;
-}
-
-float smoothstop(float val) {
-    return flip(square(flip(val)));
-}
-float smoothstart(float val) {
-    return flip(square(val));
-}
-
-float my_smoothstep(float val) {
-    return 3.0 * square(val) - 2.0 * cube(val); 
-}
-
-
-#define INV_SQRT_OF_2PI 0.39894228040143267793994605993439  // 1.0/SQRT_OF_2PI
-#define INV_PI 0.31830988618379067153776752674503
 #define INV_LOG_10 0.43429448190325176
-
-//  smartDeNoise - parameters
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//
-//  sampler2D tex     - sampler image / texture
-//  vec2 uv           - actual fragment coord
-//  float sigma  >  0 - sigma Standard Deviation
-//  float kSigma >= 0 - sigma coefficient 
-//      kSigma * sigma  -->  radius of the circular kernel
-//  float threshold   - edge sharpening threshold 
-
-vec4 smartDeNoise(sampler2D tex, vec2 uv) {
-    float sigma = 5.0;
-    float kSigma = 2.0;
-    float threshold = 25000.0;
-    
-    float radius = round(kSigma * sigma);
-    float radQ = radius * radius;
-
-    float invSigmaQx2 = .5 / (sigma * sigma);      // 1.0 / (sigma^2 * 2.0)
-    float invSigmaQx2PI = INV_PI * invSigmaQx2;    // 1.0 / (sqrt(PI) * sigma)
-
-    float invThresholdSqx2 = .5 / (threshold * threshold);     // 1.0 / (sigma^2 * 2.0)
-    float invThresholdSqrt2PI = INV_SQRT_OF_2PI / threshold;   // 1.0 / (sqrt(2*PI) * sigma)
-
-    vec4 centrPx = texture(tex,uv);
-
-    float zBuff = 0.0;
-    vec4 aBuff = vec4(0.0);
-    vec2 size = vec2(textureSize(tex, 0));
-
-    for (float x = -radius; x <= radius; x++) {
-        float pt = sqrt(radQ - x * x);  // pt = yRadius: have circular trend
-        for (float y = -pt; y <= pt; y++) {
-            vec2 d = vec2(x, y);
-
-            float blurFactor = exp( -dot(d , d) * invSigmaQx2 ) * invSigmaQx2PI;
-
-            vec4 walkPx =  texture(tex, uv + d / size);
-
-            vec4 dC = walkPx-centrPx;
-            float deltaFactor = exp( -dot(dC, dC) * invThresholdSqx2) * invThresholdSqrt2PI * blurFactor;
-
-            zBuff += deltaFactor;
-            aBuff += deltaFactor * walkPx;
-        }
-    }
-    return aBuff / zBuff;
-}
-
 
 void main() {
     float y = v_texcoord.x;
@@ -173,8 +96,6 @@ void main() {
     
     y = map(y, 0.0, 1.0, crop_top, crop_bottom);
     vec2 texcoord = vec2(y, x);
-    
-    //vec4 c = smartDeNoise(u_texture, texcoord);
     vec4 c = texture(u_texture, vec3(texcoord.x, texcoord.y, u_spectrogram_index));
     float e = INV_LOG_10 * log(c.r);
     float energyNormalised = e * u_scale;
@@ -183,7 +104,6 @@ void main() {
     // TODO: Mel scale?
     vec3 colorMapVal = texture(u_colormap, vec3(norm, 0.5, u_colormap_index)).rgb;
     //outColor = vec4(mix(colorMapVal, overlay_debug_color.rgb, overlay_debug_color.a), 1.0);
-    //outColor = vec4(colorMapVal, 1.0);
     outColor = vec4(colorMapVal, 1.0);
 }
 `;
@@ -301,7 +221,6 @@ export const submitTexture = (gl, index, bitmap, texWidth, texHeight) => {
   );
 };
 
-// TODO: We can put the full range render into the first texture unit, and then double buffer two more?
 export const init = (gl) => {
   const hasFloatLinear = !!gl.getExtension("OES_texture_float_linear");
   const vertexShader = gl.createShader(gl.VERTEX_SHADER);
@@ -316,13 +235,11 @@ export const init = (gl) => {
   gl.attachShader(program, vertexShader);
   gl.attachShader(program, fragmentShader);
   gl.linkProgram(program);
-
-  //const colorMapPosition = gl.getUniformLocation(program, 'u_colormap');
   const maps = [
     VIRIDIS,
     PLASMA,
     INFERNO,
-    GRAYSCALE_INVERTED, // TODO: If we have a light scale, we need to tell the overlay renderer, and the playhead renderer
+    GRAYSCALE_INVERTED,
   ];
   const colorMaps = new Float32Array(maps.flat());
   {
@@ -406,11 +323,8 @@ export const init = (gl) => {
   {
     const texcoordBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer);
-    // Try to remove the zeroth bucket
+    // Try to remove the zeroth bucket (which often contains high intensity noise)
     const removeZero = 1.0 / 1024.0;
-
-    // https://stackoverflow.com/questions/4364823/how-do-i-obtain-the-frequencies-of-each-value-in-an-fft
-
     // Put texcoords in the buffer
     const uvs = new Float32Array([
       1,

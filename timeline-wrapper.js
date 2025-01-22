@@ -955,7 +955,7 @@ const clickOutsideHandle = (state, timelineElements, offsetXZeroOne) => {
     state.top,
     state.bottom,
     200,
-    (start, end, top, bottom, final) => {
+    (start, end, _top, _bottom, _final) => {
       state.left = start;
       state.right = end;
       timelineElements.overlayCanvas.dispatchEvent(
@@ -985,7 +985,7 @@ const animate = async (callback) => {
 
 const clamp = (val) => Math.min(1, Math.max(0, val));
 
-const smoothstep = (val) => {
+const smoothStep = (val) => {
   const t = clamp(val);
   return t * t * (3.0 - 2.0 * t);
 };
@@ -1016,7 +1016,7 @@ const animateToRange = async (
       // Map tt into zeroToOne space
       tt = performance.now();
       // Smoothly interpolate initialStart to targetStart over a given duration.
-      const t = smoothstep(mapRange(tt, startTime, endTime, 0, 1));
+      const t = smoothStep(mapRange(tt, startTime, endTime, 0, 1));
       const startT = Math.max(0, initialStart + startRange * t);
       const endT = Math.min(1, initialEnd + endRange * t);
       const topT = Math.min(1, initialTop + topRange * t);
