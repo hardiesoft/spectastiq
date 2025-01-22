@@ -512,8 +512,6 @@ export default class Spectastiq extends HTMLElement {
           }
 
           drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
-
-          //  FIXME: Doesn't play well with zoom to region of interest.
           if (!audioState.playing) {
             audioState.progressSampleTime = performance.now();
             updatePlayhead();

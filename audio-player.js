@@ -45,6 +45,11 @@ export const initAudioPlayer = (
     state.audioProgressZeroOne =
       playerElements.audio.currentTime / state.audioDuration;
     state.progressSampleTime = performance.now();
+    if (state.audioProgressZeroOne >= 1) {
+      state.audioProgressZeroOne = 1;
+      state.playing = false;
+      pauseAudio(state, playerElements);
+    }
   });
   playerElements.audio.addEventListener("ended", () => {
     state.playing = false;

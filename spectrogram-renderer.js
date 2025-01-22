@@ -49,8 +49,6 @@ export const initSpectrogram = async (fileBytes, previousState) => {
   };
   await initWorkers(state);
   //const fileBytes = await (await fetch(filePath)).arrayBuffer();
-  // FIXME: In the event that we are truncating silence from the end of the audio file, we're still supplying the player
-  //  with the un-truncated version. Perhaps we can add a .wav RIFF header and supply the decoded array?
   const audioFileUrl = getAudioObject(fileBytes);
   const audioContext = (previousState && previousState.offlineAudioContext) || new OfflineAudioContext({
     length: 1024 * 1024,
