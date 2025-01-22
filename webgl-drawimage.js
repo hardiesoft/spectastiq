@@ -138,11 +138,11 @@ void main() {
     float max_zoom = u_crop_y.z;// Stuff max zoom into this array too.
     float max_y_zoom = max_zoom * 0.8;
     float min_range_y = 1.0 / max_zoom;
-    float top = u_uv.z;// 0.2
-    float bottom = u_uv.w;// 0.1
+    float top = u_uv.z;
+    float bottom = u_uv.w;
     float range_y = top - bottom;
     float clamped_range_y = max(range_y, min_range_y);
-    // Prevent divide my zero
+    // Prevent divide by zero
     float pos_y = bottom / max(0.000001, (1.0 - range_y));
     float m_max_zoom = map(clamped_range_y, 1.0, min_range_y, 1.0, 1.0 / max_y_zoom);
     float actual_height = clamped_range_y * (1.0 / m_max_zoom);
@@ -322,7 +322,6 @@ export const init = (gl) => {
     VIRIDIS,
     PLASMA,
     INFERNO,
-    MAGMA,
     GRAYSCALE_INVERTED, // TODO: If we have a light scale, we need to tell the overlay renderer, and the playhead renderer
   ];
   const colorMaps = new Float32Array(maps.flat());

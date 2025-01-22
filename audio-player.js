@@ -27,8 +27,6 @@ export const initAudioPlayer = (
     wasPlaying: false,
     playheadStartOffsetXZeroOne: 0,
     playheadDragOffsetX: 0,
-    // prevLeft: 0,
-    // prevRight: 1,
     followPlayhead: false,
     mainPlayheadStartOffsetXZeroOne: 0,
     mainPlayheadDragOffsetX: 0,
@@ -36,7 +34,6 @@ export const initAudioPlayer = (
     playheadWasInRangeWhenPlaybackStarted: false,
     resolver: () => {},
     resolved: false,
-    pointers: {},
   };
 
   playerElements.playButton.addEventListener("click", () =>
@@ -239,10 +236,11 @@ const updatePlayhead = (
       playheadCanvasCtx.fillRect(left, 0, 2 * devicePixelRatio, height);
     }
     {
+      const sevenPx = 7 * devicePixelRatio;
       const width = mainPlayheadCanvasCtx.canvas.width;
       const height = mainPlayheadCanvasCtx.canvas.height;
       mainPlayheadCanvasCtx.clearRect(0, 0, width, height);
-      mainPlayheadCanvasCtx.fillStyle = timelineState.isDarkTheme ? "rgba(255, 255, 255, 0.75)" : "rgba(0, 0, 0, 0.75)";
+      mainPlayheadCanvasCtx.fillStyle = timelineState.isDarkTheme ? "white" : "black";//"rgba(255, 255, 255, 0.75)" : "rgba(0, 0, 0, 0.75)";
 
       // const elapsedSeconds = (progress * state.audioDuration).toFixed(1);
       // const totalDurationSeconds = state.audioDuration.toFixed(1);
@@ -260,7 +258,7 @@ const updatePlayhead = (
         // Draw debug playhead hit areas:
         const audioProgressZeroOne = progress;
 
-        const sevenPx = 7 * devicePixelRatio;
+
         const ctx = mainPlayheadCanvasCtx;
         const startZeroOne = timelineState.left;
         const endZeroOne = timelineState.right;
@@ -306,7 +304,7 @@ const updatePlayhead = (
         });
       }
       playerElements.overlayCanvas.dispatchEvent(
-        new CustomEvent("playhead-change", {
+        new CustomEvent("playhead-update", {
           bubbles: true,
           composed: true,
           detail: {
@@ -321,7 +319,7 @@ const updatePlayhead = (
         const pro = (progress - timelineState.left) / range;
         const left = pro * width - devicePixelRatio;
         state.followPlayhead = true;
-        mainPlayheadCanvasCtx.fillRect(left, 0, 2 * devicePixelRatio, height);
+        mainPlayheadCanvasCtx.fillRect(left, (sevenPx * 3) - 2, 2 * devicePixelRatio, height);
         drawScrubHandles();
         // NOTE: Advance range if playhead was inside range when playback started.
       } else if (state.followPlayhead && !sharedState.interacting) {

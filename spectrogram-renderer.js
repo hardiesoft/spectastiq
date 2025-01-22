@@ -20,18 +20,16 @@ async function initWorkers(state) {
   }
 }
 const getAudioObject = (fileBytes) => {
-  const audioBytes = new ArrayBuffer(fileBytes.byteLength);
-  new Uint8Array(audioBytes).set(new Uint8Array(fileBytes));
-  return URL.createObjectURL(new Blob([audioBytes], { type: "audio/wav" }));
+  return URL.createObjectURL(new Blob([fileBytes], { type: "audio/wav" }));
 };
 
 /**
  *
- * @param filePath {string}
+ * @param fileBytes {ArrayBuffer}
  * @param [previousState] {{ workers: WorkerPromise[], offlineAudioContext: OfflineAudioContext }}
  * @returns {Promise<{renderToContext: ((function(CanvasRenderingContext2D, CanvasRenderingContext2D, number, number, number, number, boolean): Promise<*>)|*), audioFileUrl: string, renderRange: (function(number, number, number, boolean): Promise<T>), numAudioSamples: number, terminate: terminate, invalidateCanvasCaches: invalidateCanvasCaches}>}
  */
-export const initSpectrogram = async (filePath, previousState) => {
+export const initSpectrogram = async (fileBytes, previousState) => {
   const state = {
     sharedFloatData: undefined,
     sharedOutputData: undefined,
@@ -51,13 +49,17 @@ export const initSpectrogram = async (filePath, previousState) => {
     workers: (previousState && previousState.workers) || [],
   };
   await initWorkers(state);
-  const fileBytes = await (await fetch(filePath)).arrayBuffer();
+  //const fileBytes = await (await fetch(filePath)).arrayBuffer();
+  // FIXME: In the event that we are truncating silence from the end of the audio file, we're still supplying the player
+  //  with the un-truncated version. Perhaps we can add a .wav RIFF header and supply the decoded array?
   const audioFileUrl = getAudioObject(fileBytes);
   const audioContext = (previousState && previousState.offlineAudioContext) || new OfflineAudioContext({
     length: 1024 * 1024,
     numberOfChannels: 1,
     sampleRate: 48000,
   });
+  // TODO: Handle audio decode failure
+  // TODO: Decode audio off main thread
   const wavData = await audioContext.decodeAudioData(fileBytes);
   const floatData = wavData.getChannelData(0);
   // Sometimes we get malformed files that end in zeros – we want to truncate these.
@@ -130,10 +132,10 @@ const submitTexture = (state, ctx) => {
 //   GRAYSCALE_INVERTED,
 //   GRAYSCALE_SQUARED_INVERTED
 
-const colorMaps = ["Viridis", "Plasma", "Inferno", "Magma", "Grayscale"]
+export const colorMaps = ["Viridis", "Plasma", "Inferno", "Grayscale"];
 const cyclePalette = (state) => {
   state.colorMap++;
-  if (state.colorMap === colorMaps.length) {
+  if (state.colorMap >= colorMaps.length) {
     state.colorMap = 0;
   }
   return colorMaps[state.colorMap];
@@ -199,13 +201,13 @@ const renderToContext =
   async (
     ctx,
     overlayCtx,
+    userOverlayCtx,
     transformY,
     startZeroOne,
     endZeroOne,
     top,
     bottom,
     isMainCtx,
-    isDarkTheme = true
   ) => {
     // Figure out the best intermediate render to stretch.
     // Do we store the final coloured imagedata to stretch, or the FFT array data?
@@ -305,16 +307,7 @@ const renderToContext =
       );
 
       if (isMainCtx) {
-        // TODO: Only redraw overlay ctx if y scale has changed.
-        //  Maybe try and update overlay in parallel in an OffscreenCanvas?
-        overlayCtx.clearRect(
-          0,
-          0,
-          overlayCtx.canvas.width,
-          overlayCtx.canvas.height
-        );
-        overlayCtx.save();
-        ctx.canvas.dispatchEvent(
+        userOverlayCtx.canvas.dispatchEvent(
           new CustomEvent("render", {
             bubbles: true,
             composed: true,
@@ -327,67 +320,11 @@ const renderToContext =
               },
               sampleRate: state.actualSampleRate,
               duration: state.sharedFloatData.length / 48000,
-              context: overlayCtx,
+              context: userOverlayCtx,
+              container: userOverlayCtx.canvas.parentElement.parentElement, // #spectrogram-container
             },
           })
         );
-
-        overlayCtx.restore();
-        overlayCtx.save();
-        state.textMeasurementCache = state.textMeasurementCache || {};
-        const maxFreq = state.actualSampleRate / 2;
-        const pixelRatio = window.devicePixelRatio;
-        overlayCtx.font = `${10 * pixelRatio}px sans-serif`;
-        let prevY = -100;
-        const divisions = Math.ceil(maxFreq / 1000) + 1;
-        const divisionColor = isDarkTheme ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)";
-        const textColor = isDarkTheme ? "rgba(255, 255, 255, 0.85)" : "rgba(0, 0, 0, 0.85)";
-        for (let i = 0; i <= divisions; i++) {
-          overlayCtx.beginPath();
-          overlayCtx.strokeStyle = divisionColor;
-          overlayCtx.lineWidth = 1;
-          const yy = i / divisions;
-          const yyy = transformY(1 - yy);
-          let y = ((1 - yyy) * overlayCtx.canvas.height) / pixelRatio;
-          if (y - prevY > 15) {
-            overlayCtx.strokeRect(
-              0,
-              y * pixelRatio,
-              overlayCtx.canvas.width,
-              0
-            );
-            overlayCtx.fillStyle = textColor;
-            overlayCtx.textAlign = "right";
-            overlayCtx.textBaseline = "middle";
-            const thisFrequency = Math.round((1 - yy) * maxFreq) / 1000;
-            const label = `${thisFrequency
-              .toFixed(1)
-              .toLocaleString()} kHz`;
-            // NOTE: Measure text takes a fair bit on time on chrome on lower powered android devices; cache measurements.
-            const cacheKey = `${label}_${pixelRatio}`;
-            const textHeight = state.textMeasurementCache[cacheKey] || overlayCtx.measureText(label).actualBoundingBoxAscent;
-            state.textMeasurementCache[cacheKey]  = textHeight;
-            const overshootTop = y - ((textHeight + (5 * pixelRatio)) * 0.5);
-            const overshootBottom = y + ((textHeight + (5 * pixelRatio)) * 0.5);
-            const overshotTop = overshootTop <= 0;
-            const overshotBottom = overshootBottom >= overlayCtx.canvas.height / pixelRatio;
-            if (overshotBottom) {
-              overlayCtx.textBaseline = "bottom";
-            }
-            else if (overshotTop) {
-              overlayCtx.textBaseline = "top";
-              y += (2 * pixelRatio);
-            }
-            // NOTE: fillText is also slow on low-end devices, consider caching text and blitting.
-            overlayCtx.fillText(
-              label,
-              overlayCtx.canvas.width - 4,
-              y * pixelRatio
-            );
-            prevY = y;
-          }
-        }
-        overlayCtx.restore();
       }
       return state;
     }
@@ -573,9 +510,6 @@ async function renderArrayBuffer(
     height: canvasChunkWidth * numChunks,
   };
 
-  // Let's keep the fullRange, and then double-buffer between two others?
-  // If we draw to the webgl buffer, I guess we're going to want to keep float32arrays around instead?
-  // Meh, same size, and then we can mix and match slices? Maybe we want to do the webgl thing sooner rather than later.
   if (state.imageDatas.length === 0) {
     state.imageDatas = [nextImageData];
   } else if (state.imageDatas.length === 1) {

@@ -182,70 +182,70 @@ const onPointerMove = (canvas, state, sharedState) => {
   if (numPointers <= 2) {
     const pointers = Object.values(state.pointers);
     const canvasWidth = canvas.width / devicePixelRatio;
-    let pinchXLeftZeroOne;
-    let pinchXRightZeroOne;
-    if (numPointers === 2) {
-      if (!state.panStarted || state.pinchStarted) {
-        const x0 = pointers[0].x;
-        const x1 = pointers[1].x;
-        pinchXLeftZeroOne = Math.max(0, Math.min(x0, x1) / canvasWidth);
-        pinchXRightZeroOne = Math.min(1, Math.max(x0, x1) / canvasWidth);
+    if (!state.regionCreationMode) {
+      let pinchXLeftZeroOne;
+      let pinchXRightZeroOne;
+      if (numPointers === 2) {
+        if (!state.panStarted || state.pinchStarted) {
+          const x0 = pointers[0].x;
+          const x1 = pointers[1].x;
+          pinchXLeftZeroOne = Math.max(0, Math.min(x0, x1) / canvasWidth);
+          pinchXRightZeroOne = Math.min(1, Math.max(x0, x1) / canvasWidth);
+          if (!state.pinchStarted) {
+            state.pinchStarted = true;
+            if (!sharedState.interacting) {
+              canvas.dispatchEvent(
+                new Event("interaction-begin")
+              );
+            }
+            const range = state.right - state.left;
+            state.initialPinchXLeftZeroOne = state.left + range * pinchXLeftZeroOne;
+            state.initialPinchXRightZeroOne =
+              state.left + range * pinchXRightZeroOne;
+          }
+        } else {
+          state.pinchStarted = false;
+          state.panStarted = false;
+        }
+      } else if (numPointers === 1) {
         if (!state.pinchStarted) {
-          state.pinchStarted = true;
-          if (!sharedState.interacting) {
-            canvas.dispatchEvent(
-              new Event("interaction-begin")
+          let range = state.right - state.left;
+          if (state.panStarted) {
+            range = state.initialPanRange;
+          }
+          const x0 = pointers[0].x / canvasWidth;
+          pinchXLeftZeroOne = Math.max(0, x0);
+          pinchXRightZeroOne = pinchXLeftZeroOne + range;
+          if (!state.pinchStarted && !state.panStarted && !state.scrubGlobalStarted && !state.scrubLocalStarted) {
+            state.panStarted = true;
+            if (!sharedState.interacting) {
+              canvas.dispatchEvent(
+                new Event("interaction-begin")
+              );
+            }
+            state.initialPinchXLeftZeroOne = Math.max(
+              0,
+              state.left + range * pinchXLeftZeroOne
             );
-          }
-          const range = state.right - state.left;
-          state.initialPinchXLeftZeroOne = state.left + range * pinchXLeftZeroOne;
-          state.initialPinchXRightZeroOne =
-            state.left + range * pinchXRightZeroOne;
-        }
-      } else {
-        state.pinchStarted = false;
-        state.panStarted = false;
-      }
-    } else if (numPointers === 1) {
-      if (!state.pinchStarted) {
-        let range = state.right - state.left;
-        if (state.panStarted) {
-          range = state.initialPanRange;
-        }
-        const x0 = pointers[0].x / canvasWidth;
-        pinchXLeftZeroOne = Math.max(0, x0);
-        pinchXRightZeroOne = pinchXLeftZeroOne + range;
-        if (!state.pinchStarted && !state.panStarted && !state.scrubGlobalStarted && !state.scrubLocalStarted) {
-          state.panStarted = true;
-          if (!sharedState.interacting) {
-            canvas.dispatchEvent(
-              new Event("interaction-begin")
+            state.initialPinchXRightZeroOne = Math.min(
+              1,
+              state.left + range * pinchXRightZeroOne
             );
-          }
-          state.initialPinchXLeftZeroOne = Math.max(
-            0,
-            state.left + range * pinchXLeftZeroOne
-          );
-          state.initialPinchXRightZeroOne = Math.min(
-            1,
-            state.left + range * pinchXRightZeroOne
-          );
-          state.startPanXZeroOne = state.left;
-          state.initialPanRange = state.right - state.left;
-        }
-        else if (state.scrubLocalStarted || state.scrubGlobalStarted) {
-          if (!sharedState.interacting) {
-            canvas.dispatchEvent(
-              new Event("interaction-begin")
-            );
-          }
-          const progress = (pointers[0].x - state.scrubDragOffsetX) / canvasWidth;
-          if (state.scrubLocalStarted) {
-            state.dragLocalPlayhead(progress);
-          } else if (state.scrubGlobalStarted) {
-            state.dragGlobalPlayhead(progress);
-          }
-        } else if (state.panStarted) {
+            state.startPanXZeroOne = state.left;
+            state.initialPanRange = state.right - state.left;
+          } else if (state.scrubLocalStarted || state.scrubGlobalStarted) {
+            if (!sharedState.interacting) {
+              canvas.dispatchEvent(
+                new Event("interaction-begin")
+              );
+            }
+            const progress = (pointers[0].x - state.scrubDragOffsetX) / canvasWidth;
+            if (state.scrubLocalStarted) {
+              state.dragLocalPlayhead(progress);
+            } else if (state.scrubGlobalStarted) {
+              state.dragGlobalPlayhead(progress);
+            }
+          } else if (state.panStarted) {
             const localLeft = Math.max(
               0,
               state.startPanXZeroOne + range * pinchXLeftZeroOne
@@ -261,27 +261,35 @@ const onPointerMove = (canvas, state, sharedState) => {
                 },
               })
             );
+          }
+        } else {
+          state.pinchStarted = false;
+          state.panStarted = false;
         }
-      } else {
-        state.pinchStarted = false;
-        state.panStarted = false;
       }
-    }
-    if (sharedState.interacting && state.pinchStarted && numPointers < 2 || state.panStarted && numPointers < 1) {
-      canvas.dispatchEvent(
-        new Event("interaction-end")
-      );
-    }
-    // TODO: We may want to allow pinching in to less than 100%, and then bounce back out.
-    if (state.pinchStarted) {
-      updatePinch(
-        pinchXLeftZeroOne,
-        pinchXRightZeroOne,
-        state.initialPinchXLeftZeroOne,
-        state.initialPinchXRightZeroOne,
-        state,
-        canvas
-      );
+      if (sharedState.interacting && state.pinchStarted && numPointers < 2 || state.panStarted && numPointers < 1) {
+        canvas.dispatchEvent(
+          new Event("interaction-end")
+        );
+      }
+      // TODO: We may want to allow pinching in to less than 100%, and then bounce back out.
+      if (state.pinchStarted) {
+        updatePinch(
+          pinchXLeftZeroOne,
+          pinchXRightZeroOne,
+          state.initialPinchXLeftZeroOne,
+          state.initialPinchXRightZeroOne,
+          state,
+          canvas
+        );
+      }
+    } else {
+      // Do region creation stuff - redraw overlay?
+      if (!sharedState.interacting) {
+        canvas.dispatchEvent(
+          new Event("interaction-begin")
+        );
+      }
     }
   }
 };
@@ -356,9 +364,9 @@ const dragHandle = (e, timelineElements, state, thisOffsetX) => {
 };
 
 export const drawTimelineUI =
-  (timelineElements) => (startZeroOne, endZeroOne, currentAction) => {
+  (timelineElements, state) => (startZeroOne, endZeroOne, currentAction) => {
     // Draw handles on timelineUICanvas.
-    const isDarkTheme = false;
+    const isDarkTheme = state.isDarkTheme;
     const c = isDarkTheme ? 255 : 50;
     const ctx = timelineElements.timelineUICanvas.getContext("2d");
     const width = ctx.canvas.width;
@@ -483,7 +491,7 @@ export const drawTimelineUI =
         // Draw left resize handle
         ctx.fillStyle = `rgba(${c}, ${c}, ${c}, 0.75)`;
         ctx.beginPath();
-        if (handleWidth > minHandleWidth) {
+        if (handleWidth > minHandleWidth * 2) {
           resizeHandleAt(Math.max(0, start - resizeHandleWidth * 0.5));
         } else {
           resizeHandleAt(Math.max(0, (start - resizeHandleWidth * 0.5) + (handleWidth / 2 - minHandleWidth)));
@@ -580,9 +588,12 @@ export const initTimeline = (
     zoomX: 1,
     isDarkTheme: true,
     numAudioSamples: 0,
-    drawTimelineUI: drawTimelineUI(timelineElements),
+    drawTimelineUI,
     pointers: {},
+    regionCreationMode: false,
   };
+
+  state.drawTimelineUI = drawTimelineUI(timelineElements, state)
 
   const hitTestTimeline = (xOffsetZeroOne) => {
 
@@ -615,6 +626,8 @@ export const initTimeline = (
 
   timelineElements.timelineUICanvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
     const xOffsetZeroOne = e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
     const {
       inResizeHandleLeft,
@@ -639,6 +652,8 @@ export const initTimeline = (
   });
   timelineElements.timelineUICanvas.addEventListener("pointerup", (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
     if (state.currentAction !== null) {
       switch (state.currentAction) {
         case "pan":
@@ -653,6 +668,8 @@ export const initTimeline = (
   });
   timelineElements.timelineUICanvas.addEventListener("pointermove", (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
     const xOffsetZeroOne = e.offsetX / (timelineElements.timelineUICanvas.width / devicePixelRatio);
     if (state.currentAction !== null) {
       switch (state.currentAction) {
@@ -690,6 +707,8 @@ export const initTimeline = (
   });
   timelineElements.timelineUICanvas.addEventListener("pointercancel", (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
     if (state.currentAction !== null) {
       switch (state.currentAction) {
         case "pan":
@@ -745,6 +764,8 @@ export const initTimeline = (
       numPointers = Object.keys(state.pointers).length;
       const atBottom = e.offsetY > (timelineElements.canvas.height / devicePixelRatio) - 44;
       const atTop = e.offsetY < 44;
+      state.interactionStartX = e.offsetX;
+      state.interactionStartY = e.offsetY;
       if (numPointers === 1 && (atTop || atBottom)) {
         const audioProgressZeroOne = state.audioState.audioProgressZeroOne;
         const minHandleWidth = 44 * devicePixelRatio;
@@ -758,6 +779,11 @@ export const initTimeline = (
             state.scrubLocalStarted = true;
             state.scrubDragOffsetX = e.offsetX - (localProgress * width);
             state.startPlayheadDrag();
+            if (e.pointerType === "mouse") {
+              if (!timelineElements.spectrogramContainer.classList.contains("dragging")) {
+                timelineElements.spectrogramContainer.classList.add("dragging");
+              }
+            }
           }
         } else if (atBottom) {
           const globalPlaybackLeft = Math.max(0, (audioProgressZeroOne * width) - minHandleWidth / 2);
@@ -767,6 +793,11 @@ export const initTimeline = (
             state.scrubGlobalStarted = true;
             state.scrubDragOffsetX = e.offsetX - (audioProgressZeroOne * width);
             state.startPlayheadDrag();
+            if (e.pointerType === "mouse") {
+              if (!timelineElements.spectrogramContainer.classList.contains("dragging")) {
+                timelineElements.spectrogramContainer.classList.add("dragging");
+              }
+            }
           }
         }
       }
@@ -774,11 +805,35 @@ export const initTimeline = (
   });
 
   timelineElements.overlayCanvas.addEventListener("pointermove", (e) => {
-    // TODO: Was this testing with a pen display that I needed pressure for?
+    e.preventDefault();
     if (e.pointerType === "touch" || (e.pointerType === "mouse" && e.button !== -1) || e.pressure > 0) {
-      e.preventDefault();
       state.pointers[e.pointerId] = {x: e.offsetX, y: e.offsetY};
       onPointerMove(timelineElements.overlayCanvas, state, sharedState);
+      if (state.panStarted && e.pointerType === "mouse") {
+        if (!timelineElements.spectrogramContainer.classList.contains("dragging")) {
+          timelineElements.spectrogramContainer.classList.add("dragging");
+        }
+      }
+      if (state.regionCreationMode) {
+        timelineElements.overlayCanvas.dispatchEvent(new CustomEvent("custom-region-change", {
+          detail: {
+            left: Math.min(e.offsetX, state.interactionStartX),
+            right: Math.max(e.offsetX, state.interactionStartX),
+            top: Math.min(e.offsetY, state.interactionStartY),
+            bottom: Math.max(e.offsetY, state.interactionStartY),
+          }
+        }))
+      }
+    } else if (e.pointerType === "mouse" && e.pressure === 0) {
+      // NOTE: Re-dispatch mousemove for user/client embed handling.
+      timelineElements.spectrogramContainer.dispatchEvent(new CustomEvent("spectastiq-pointermove", {
+        bubbles: true,
+        composed: true,
+        detail: {
+          offsetX: e.offsetX,
+          offsetY: e.offsetY,
+        }
+      }));
     }
   });
 
@@ -797,10 +852,43 @@ export const initTimeline = (
       if (state.scrubLocalStarted || state.scrubGlobalStarted) {
         state.endPlayheadDrag();
       }
-      state.panStarted = false;
-      state.scrubGlobalStarted = false;
-      state.scrubLocalStarted = false;
-      state.pinchStarted = false;
+      if (!state.regionCreationMode) {
+        const pointerMoved = () => {
+          const dX = Math.abs(state.interactionStartX - e.offsetX);
+          const dY = Math.abs(state.interactionStartY - e.offsetY);
+          return dX > 4 || dY > 4;
+        };
+        if (!state.scrubLocalStarted && !state.scrubLocalStarted && !state.pinchStarted && (!state.panStarted || (state.panStarted && !pointerMoved()))) {
+          // Clicked without moving pointer
+          timelineElements.spectrogramContainer.dispatchEvent(new CustomEvent("spectastiq-select", {
+            bubbles: true,
+            composed: true,
+            detail: {
+              offsetX: e.offsetX,
+              offsetY: e.offsetY,
+            }
+          }));
+        }
+        if (timelineElements.spectrogramContainer.classList.contains("dragging")) {
+          timelineElements.spectrogramContainer.classList.remove("dragging");
+        }
+
+        state.panStarted = false;
+        state.scrubGlobalStarted = false;
+        state.scrubLocalStarted = false;
+        state.pinchStarted = false;
+      } else {
+        timelineElements.overlayCanvas.dispatchEvent(new CustomEvent("custom-region-create", {
+          detail: {
+            left: Math.min(e.offsetX, state.interactionStartX),
+            right: Math.max(e.offsetX, state.interactionStartX),
+            top: Math.min(e.offsetY, state.interactionStartY),
+            bottom: Math.max(e.offsetY, state.interactionStartY),
+          }
+        }));
+        state.regionCreationMode = false;
+        timelineElements.spectrogramContainer.classList.remove("region-creation-mode");
+      }
       if (sharedState.interacting) {
         timelineElements.overlayCanvas.dispatchEvent(new Event("interaction-end"));
       }
@@ -823,7 +911,7 @@ export const initTimeline = (
       final
     );
   return {
-    drawTimelineUI: drawTimelineUI(timelineElements),
+    drawTimelineUI: drawTimelineUI(timelineElements, state),
     timelineState: state,
     animateToRange,
     getMaxXZoom: () => getMaxXZoom(timelineElements.canvas.width, state),
@@ -885,54 +973,6 @@ const clickOutsideHandle = (state, timelineElements, offsetXZeroOne) => {
     timelineElements.overlayCanvas.dispatchEvent(new Event("interaction-end"));
   });
 };
-
-// export const startSpan = async () => {
-//   // start: 4120338 ..0.28457847
-//   // end: 4310645 ..0.29772236
-//   // left = 0.28457847;
-//   // right = 0.29772236;
-//   left = 0.2;
-//   right = 0.7;
-//
-//   left = 0.19047619;
-//   right = 0.38095238;
-//
-//   left = 0.28571429;
-//   right = 0.47619048;
-//
-//   left = 0.42857143;
-//   right = 0.80952381;
-//
-//   // left = 0;
-//   // right = 1;
-//
-//   zoomX = 1 / (right - left);
-//
-//   await renderRange(ctx, miniMapCtx, timelineUICanvasCtx, playheadScrubber, maintimelineUICanvasCtx, mainPlayheadScrubber, left, right);
-//   await positionHandles(left, right);
-//   // await updateZoom(0.2, 1);
-//   // await updateZoom(0.2, 1);
-//   // await updateZoom(0.2, 1);
-//   // await updateZoom(0.2, 1);
-//   // await updateZoom(0.2, 1);
-//   // await updateZoom(0.2, 1);
-//   // await updateZoom(0.2, 1);
-//   // await updateZoom(0.2, 1);
-//   // await updateZoom(0.2, 1);
-//   // await updateZoom(0.2, 1);
-//   // await updateZoom(0.2, 1);
-//   // await updateZoom(0.2, 1);
-//
-//   // TODO: Animate zooms to areas of interest.
-// }
-
-// export const renderInitial = async () => {
-//   left = 0;
-//   right = 1;
-//   zoomX = 1;
-//   await renderRange(ctx, miniMapCtx, timelineUICanvasCtx, playheadScrubber, maintimelineUICanvasCtx, mainPlayheadScrubber, left, right, true);
-//   await positionHandles(left, right);
-// }
 
 const animate = async (callback) => {
   return new Promise((resolve) => {
