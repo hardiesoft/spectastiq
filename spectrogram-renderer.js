@@ -453,9 +453,6 @@ async function renderArrayBuffer(
     negs.sort();
     const clip = Math.min(negs[Math.floor(negs.length / 2)], FFT_WIDTH / 2);
     state.actualSampleRate = (((clip - 1) * 48000) / FFT_WIDTH) * 2;
-    console.log(
-      `Actual audio file response ${Math.round(state.actualSampleRate)}Khz`
-    );
     state.cropAmountTop = 1 - clip / (FFT_WIDTH / 2);
     // TODO: Crop off noise floor?
   }

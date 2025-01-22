@@ -845,7 +845,6 @@ export default class Spectastiq extends HTMLElement {
       }
     });
     this.shadowRoot.addEventListener("audio-loaded", (e) => {
-      console.log("audio loaded", e.detail.sampleRate);
       clearOverlay();
       redrawOverlay(timelineState, e.detail.sampleRate);
     });
@@ -1078,7 +1077,8 @@ export default class Spectastiq extends HTMLElement {
       cancelable: false,
     }));
     // Initial attributeChangedCallback happens before connectedCallback, so need to load src after initial one-time setup.
-    if (src) {
+    if (src && src !== "null" && src !== "undefined") {
+      // NOTE: Vue initially passes `null` or `undefined` to src, which gets stringified.
       this.loadSrc(src);
     }
   }
