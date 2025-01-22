@@ -24,7 +24,6 @@ const getAudioObject = (fileBytes) => {
 };
 
 /**
- *
  * @param fileBytes {ArrayBuffer}
  * @param [previousState] {{ workers: WorkerPromise[], offlineAudioContext: OfflineAudioContext }}
  * @returns {Promise<{renderToContext: ((function(CanvasRenderingContext2D, CanvasRenderingContext2D, number, number, number, number, boolean): Promise<*>)|*), audioFileUrl: string, renderRange: (function(number, number, number, boolean): Promise<T>), numAudioSamples: number, terminate: terminate, invalidateCanvasCaches: invalidateCanvasCaches}>}
@@ -305,27 +304,6 @@ const renderToContext =
         state.cropAmountBottom,
         state.colorMap
       );
-
-      if (isMainCtx) {
-        userOverlayCtx.canvas.dispatchEvent(
-          new CustomEvent("render", {
-            bubbles: true,
-            composed: true,
-            detail: {
-              range: {
-                begin: startZeroOne,
-                end: endZeroOne,
-                min: bottom,
-                max: top,
-              },
-              sampleRate: state.actualSampleRate,
-              duration: state.sharedFloatData.length / 48000,
-              context: userOverlayCtx,
-              container: userOverlayCtx.canvas.parentElement.parentElement, // #spectrogram-container
-            },
-          })
-        );
-      }
       return state;
     }
   };
@@ -449,25 +427,6 @@ async function renderArrayBuffer(
   // FIXME - Only grab the maxes once, at startup? It's possible there are smaller sounds that aren't captured at that zoom
   //  level, and the max may need to be adjusted though.
   const results = await Promise.all(job);
-
-  const timings = document.getElementById("timings");
-  if (false && timings) {
-    state.timings = state.timings || [];
-    state.totalTimings = state.totalTimings || [];
-    state.timings.push(...results.map(({ time }) => time));
-    state.totalTimings.push(performance.now() - start);
-    timings.innerText = `Wasm took ${
-      state.timings[state.timings.length - 1]
-    } avg (${
-      state.timings.reduce((prev, curr) => {
-        return prev + curr;
-      }, 0) / state.timings.length
-    }), total: ${state.totalTimings[state.totalTimings.length - 1]}, avg (${
-      state.totalTimings.reduce((prev, curr) => {
-        return prev + curr;
-      }, 0) / state.totalTimings.length
-    })`;
-  }
   if (!state.max) {
     state.max = Math.max(...results.map(({ max }) => max));
   }

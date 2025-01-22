@@ -5,7 +5,7 @@ An interactive spectrogram renderer and audio player, optimised for touch device
 *Spectastiq* is available as a web-component, which means that you can include the javascript file in the HTML 
 page where you'd like to use it, and then instantiate it using a custom HTML tag.
 
-```
+```html
 <script type="module" src="/path/to/spectastiq.js"></script>
 <spectastiq-viewer src="/path/to/audio/my-audio-file.mp3"></spectastiq-viewer>
 ```
@@ -28,6 +28,24 @@ Once you've got those requirements installed, you can run `wasm-pack build --tar
 files will appear in the `./pkg` folder.
 
 ## Advanced integrations
+
+You can embed *spectastiq* into your application, and extend it (for example, drawing an overlay showing regions of interest in the audio).
+
+### Custom player UI controls
+
+Replace the default audio player controls with your own using the `player-controls` template slot:
+```html
+<script type="module" src="/path/to/spectastiq.js"></script>
+<spectastiq-viewer src="/path/to/audio/my-audio-file.mp3">
+    <div slot="player-controls">
+      <button>My custom button</button>
+    </div>
+</spectastiq-viewer>
+```
+
+### Events dispatched by *spectastiq*
+
+`spectastiq-loaded`
 
 TODO
 

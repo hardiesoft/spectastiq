@@ -1,4 +1,5 @@
 export const initAudioPlayer = (
+  root,
   sharedState,
   timelineState,
   playerElements,
@@ -34,6 +35,7 @@ export const initAudioPlayer = (
     playheadWasInRangeWhenPlaybackStarted: false,
     resolver: () => {},
     resolved: false,
+    root,
   };
 
   playerElements.playButton.addEventListener("click", () =>
@@ -276,13 +278,13 @@ const updatePlayhead = (
           updatePlayhead(state, timelineState, sharedState, playerElements);
         });
       }
-      playerElements.overlayCanvas.dispatchEvent(
+      state.root.dispatchEvent(
         new CustomEvent("playhead-update", {
-          bubbles: true,
+          bubbles: false,
           composed: true,
+          cancelable: false,
           detail: {
-            timeInSeconds: (progress * state.audioDuration),
-            totalDurationInSeconds: state.audioDuration
+            timeInSeconds: (progress * state.audioDuration)
           }
         })
       );

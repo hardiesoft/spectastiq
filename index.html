@@ -56,15 +56,19 @@
     </button>
     <a class="link" href="https://github.com/hardiesoft/spectastiq">Spectastiq github repo</a>
   </div>
-  <div id="timings"></div>
   <script>
     const spectastiq = document.getElementById("spectastiq");
     const buttons =  document.querySelectorAll('.src-button');
     buttons.forEach(button => {
       button.addEventListener('click', (e) => {
-        //spectastiq.setAttribute("src", e.target.innerText.trim());
         spectastiq.src = e.target.innerText.trim();
       });
+    });
+    spectastiq.addEventListener('spectastiq-ready', (e) => {
+      console.log(e);
+    });
+    spectastiq.addEventListener('spectastiq-audio-loaded', (e) => {
+      console.log(e);
     });
   </script>
 </body>

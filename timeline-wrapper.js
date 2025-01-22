@@ -569,6 +569,7 @@ const dragResize = (e, timelineElements, state, xOffsetZeroOne) => {
 };
 
 export const initTimeline = (
+  root,
   sharedState,
   timelineElements,
 ) => {
@@ -826,12 +827,14 @@ export const initTimeline = (
       }
     } else if (e.pointerType === "mouse" && e.pressure === 0) {
       // NOTE: Re-dispatch mousemove for user/client embed handling.
-      timelineElements.spectrogramContainer.dispatchEvent(new CustomEvent("spectastiq-pointermove", {
-        bubbles: true,
+      root.dispatchEvent(new CustomEvent("move", {
+        bubbles: false,
         composed: true,
+        cancelable: false,
         detail: {
           offsetX: e.offsetX,
           offsetY: e.offsetY,
+          container: timelineElements.spectrogramContainer
         }
       }));
     }
@@ -860,12 +863,14 @@ export const initTimeline = (
         };
         if (!state.scrubLocalStarted && !state.scrubLocalStarted && !state.pinchStarted && (!state.panStarted || (state.panStarted && !pointerMoved()))) {
           // Clicked without moving pointer
-          timelineElements.spectrogramContainer.dispatchEvent(new CustomEvent("spectastiq-select", {
-            bubbles: true,
+          root.dispatchEvent(new CustomEvent("select", {
+            bubbles: false,
             composed: true,
+            cancelable: false,
             detail: {
               offsetX: e.offsetX,
               offsetY: e.offsetY,
+              container: timelineElements.spectrogramContainer
             }
           }));
         }
