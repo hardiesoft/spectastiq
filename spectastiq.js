@@ -297,11 +297,7 @@ export default class Spectastiq extends HTMLElement {
     this.sharedState.interacting = false;
     (async () => {
       // TODO: We don't *need* to reinit workers, only unload them on disconnect.
-      performance.mark("unloadStart");
       this.unload();
-      performance.mark("unloadEnd");
-      performance.measure("unload", "unloadStart", "unloadEnd");
-      performance.mark("initSpectrogramStart");
       this.beginLoad();
 
       // Download audio file and update the progress bar.
@@ -349,8 +345,6 @@ export default class Spectastiq extends HTMLElement {
         cyclePalette,
         persistentSpectrogramState
       } = await initSpectrogram(fileBytes, this.persistentSpectrogramState || null);
-      performance.mark("initSpectrogramEnd");
-      performance.measure("initSpectrogram", "initSpectrogramStart", "initSpectrogramEnd");
       timelineState.numAudioSamples = numAudioSamples;
       timelineState.left = 0;
       timelineState.top = 1;
@@ -488,12 +482,10 @@ export default class Spectastiq extends HTMLElement {
       let cropAmountTop = 0;
       this.render = ({ detail: { initialRender, force } }) => {
         if (this.raf) {
-          //console.log("requested render", performance.now());
           cancelAnimationFrame(this.raf);
           this.raf = undefined;
         }
         this.raf = requestAnimationFrame(() => {
-          //performance.mark("RenderStart");
           const startZeroOne = timelineState.left;
           const endZeroOne = timelineState.right;
           const top = timelineState.top;

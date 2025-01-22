@@ -360,8 +360,6 @@ async function renderArrayBuffer(
   endSample
 ) {
   const widthChanged = canvasWidth !== state.canvasWidth;
-  const start = performance.now();
-
   const numChunks = numWorkers;
   const canvasChunkWidth = Math.ceil(canvasWidth / numChunks);
 
