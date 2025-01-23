@@ -17,8 +17,7 @@ template.innerHTML = `
     
     -webkit-tap-highlight-color: transparent;
     -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    -khtml-user-select: none;
+    -webkit-user-select: none;   
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;                    
@@ -284,9 +283,7 @@ export default class Spectastiq extends HTMLElement {
     const canvas = this.timelineElements.canvas;
     const mapCtx = this.timelineElements.mapCanvas.getContext("webgl2");
     const ctx = canvas.getContext("webgl2");
-    const overlayCtx = this.timelineElements.overlayCanvas.getContext("2d");
     const userOverlayCtx = this.timelineElements.userOverlayCanvas.getContext("2d");
-
     this.progressBar.setAttribute("value", String(0));
 
     const MAX_ZOOMED_REGION = 0.8;

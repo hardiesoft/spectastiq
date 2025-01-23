@@ -120,15 +120,6 @@ const submitTexture = (state, ctx) => {
   return state.ctxs.get(ctx).submitTexture;
 };
 
-// VIRIDIS,
-//   PLASMA,
-//   INFERNO,
-//   MAGMA,
-//   GRAYSCALE,
-//   GRAYSCALE_SQUARED,
-//   GRAYSCALE_INVERTED,
-//   GRAYSCALE_SQUARED_INVERTED
-
 export const colorMaps = ["Viridis", "Plasma", "Inferno", "Grayscale"];
 const cyclePalette = (state) => {
   state.colorMap++;

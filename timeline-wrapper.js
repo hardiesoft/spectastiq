@@ -629,6 +629,10 @@ export const initTimeline = (
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
+    if (e.pointerType === "mouse" && e.button !== 0) {
+      // Only response to left mouse clicks
+      return;
+    }
     const xOffsetZeroOne = e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
     const {
       inResizeHandleLeft,

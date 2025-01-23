@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Spectastiq Example</title>
+  <title>Spectastiq Spectrogram Example</title>
   <style>
     body {
-        margin: 0;
+        margin: 30px 0 0 0;
         background: darkgrey;
         font-family: sans-serif;
         overflow: hidden;
@@ -20,16 +20,16 @@
         margin: 0 30px;
     }
   </style>
+  <!--
+    If the example is not served from a secure context that opts into `SharedArrayBuffer`,
+    this serves resources with those headers set.
+   -->
   <script src="./enable-threads.js" crossorigin></script>
   <script type="module" src="./spectastiq.js" crossorigin></script>
 </head>
 <body>
   <div class="container">
-    <spectastiq-viewer id="spectastiq" src="robin-1.wav">
-<!--      <div slot="player-controls">-->
-<!--        <button>Click me</button>-->
-<!--      </div>-->
-    </spectastiq-viewer>
+    <spectastiq-viewer id="spectastiq" src="robin-1.wav"></spectastiq-viewer>
     <button class="src-button">
       recording-2055766-05-01-2025--15-01-42.mp4
     </button>
