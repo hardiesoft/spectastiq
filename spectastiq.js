@@ -496,6 +496,7 @@ export default class Spectastiq extends HTMLElement {
 
           if (this.deferredWidth && ctx.canvas.width !== this.deferredWidth) {
             this.resizeCanvases(this.deferredWidth, true);
+            this.timelineElements.container.classList.remove("disabled");
           }
 
           drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
@@ -695,7 +696,7 @@ export default class Spectastiq extends HTMLElement {
       playheadCanvasCtx: playheadCanvas.getContext("2d"),
       mainPlayheadCanvasCtx: mainPlayheadCanvas.getContext("2d"),
     };
-    const resizeCanvas = (canvas, width, height, forReal) => {
+    const resizeCanvas = (canvas, width, height, forReal = true) => {
       canvas.style.height = `${height}px`;
       // NOTE: Defer resizing the backing canvas until we actually want to draw to it, this makes resizes look better.
       if (!this.resizeInited || forReal) {
@@ -1012,19 +1013,19 @@ export default class Spectastiq extends HTMLElement {
     this.resizeCanvases = (resizedWidth, forReal) => {
       const width = resizedWidth || container.getBoundingClientRect().width;
       resizeCanvas(this.timelineElements.canvas, width, 300, forReal);
-      resizeCanvas(this.timelineElements.overlayCanvas, width, 300, forReal);
+      resizeCanvas(this.timelineElements.overlayCanvas, width, 300, true);
       resizeCanvas(
         this.timelineElements.userOverlayCanvas,
         width,
         300,
-        forReal
+        true
       );
 
       resizeCanvas(this.timelineElements.mapCanvas, width, 60, forReal);
-      resizeCanvas(this.timelineElements.timelineUICanvas, width, 60, forReal);
+      resizeCanvas(this.timelineElements.timelineUICanvas, width, 60, true);
 
-      resizeCanvas(this.playerElements.mainPlayheadCanvas, width, 300, forReal);
-      resizeCanvas(this.playerElements.playheadCanvas, width, 60, forReal);
+      resizeCanvas(this.playerElements.mainPlayheadCanvas, width, 300, true);
+      resizeCanvas(this.playerElements.playheadCanvas, width, 60, true);
 
       const wasTriggeredByResizeEvent = !!resizedWidth;
       if (wasTriggeredByResizeEvent && !!this.resizeInited) {
@@ -1032,6 +1033,7 @@ export default class Spectastiq extends HTMLElement {
           const startZeroOne = timelineState.left;
           const endZeroOne = timelineState.right;
           drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+          redrawOverlay(timelineState, this.actualSampleRate);
           if (!audioState.playing) {
             audioState.progressSampleTime = performance.now();
             updatePlayhead();
@@ -1042,20 +1044,18 @@ export default class Spectastiq extends HTMLElement {
         clearTimeout(this.sharedState.interactionTimeout);
         this.sharedState.interactionTimeout = setTimeout(() => {
           this.invalidateCanvasCaches && this.invalidateCanvasCaches();
-
-          // TODO: Might be better to pass the render function into render range, rather than yielding via async?
-          //  Probably makes no difference in this instance, since this is truly async via a worker.
           this.renderRange &&
             this.renderRange(0, 1, canvas.width, true).then(() => {
               this.render({ detail: { initialRender: true, force: true } });
-              this.timelineElements.container.classList.remove("disabled");
             });
           this.sharedState.interacting = false;
         }, 300);
       }
     };
     const resizeObserver = new ResizeObserver((entries) => {
-      this.resizeCanvases(entries[0].contentRect.width);
+      // We'll defer resizing the spectrogram backing canvas until a new spectrogram has been created at the new
+      // width and is ready to render.
+      this.resizeCanvases(entries[0].contentRect.width, false);
     });
     resizeObserver.observe(container);
 
