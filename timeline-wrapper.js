@@ -1,9 +1,5 @@
 import { mapRange } from "./webgl-drawimage.js";
 
-export const adjustZoom = (pxRatio, amount, state, sharedState, timelineElements) => {
-  updateZoom(pxRatio, amount, state, sharedState, timelineElements);
-};
-
 const getMaxXZoom = (canvasWidth, state) => {
   const audioSamples = state.numAudioSamples;
   if (audioSamples) {
@@ -81,28 +77,33 @@ const updateZoom = (
     getMaxXZoom(timelineElements.canvas.width, state),
     state.zoomX
   );
-  // See how much zoom level has changed, and how much we have to distribute.
-  const visiblePortion = 1 / state.zoomX;
-  const invisiblePortion = 1 - visiblePortion; // How much offscreen to distribute.
-  // Distribute proportionally on either side of pX the increase in width/zoom.
-  const newWToDistribute = invisiblePortion - invisiblePortionI;
-  const leftShouldTake = newWToDistribute * pXRatio;
-  const rightShouldTake = newWToDistribute * (1 - pXRatio);
-  const prevLeft = state.left;
-  const prevRight = state.right;
+  if (state.zoomX === 1) {
+    state.left = 0;
+    state.right = 1;
+  } else {
+    // See how much zoom level has changed, and how much we have to distribute.
+    const visiblePortion = 1 / state.zoomX;
+    const invisiblePortion = 1 - visiblePortion; // How much offscreen to distribute.
+    // Distribute proportionally on either side of pX the increase in width/zoom.
+    const newWToDistribute = invisiblePortion - invisiblePortionI;
+    const leftShouldTake = newWToDistribute * pXRatio;
+    const rightShouldTake = newWToDistribute * (1 - pXRatio);
+    const prevLeft = state.left;
+    const prevRight = state.right;
 
-  state.left += leftShouldTake;
-  state.left = Math.max(0, state.left);
-  // NOTE: Balance out if one side took less than it's fair share.
-  const leftTook = state.left - prevLeft;
+    state.left += leftShouldTake;
+    state.left = Math.max(0, state.left);
+    // NOTE: Balance out if one side took less than it's fair share.
+    const leftTook = state.left - prevLeft;
 
-  state.right -= newWToDistribute * (1 - pXRatio);
-  state.right -= Math.min(0, leftShouldTake - leftTook);
-  state.right = Math.min(1, state.right);
+    state.right -= newWToDistribute * (1 - pXRatio);
+    state.right -= Math.min(0, leftShouldTake - leftTook);
+    state.right = Math.min(1, state.right);
 
-  // NOTE: If right didn't take everything it could, redistribute to the left.
-  const rightTook = prevRight - state.right;
-  state.left += Math.min(0, rightShouldTake - rightTook);
+    // NOTE: If right didn't take everything it could, redistribute to the left.
+    const rightTook = prevRight - state.right;
+    state.left += Math.min(0, rightShouldTake - rightTook);
+  }
 
   if (!sharedState.interacting) {
     const changeLeft = Math.abs(initialLeft - state.left);
@@ -739,7 +740,7 @@ export const initTimeline = (
       // This is likely a trackpad pinch event (with real number values)
       amount = -e.deltaY * 0.01;
     }
-    adjustZoom(xOffset, amount, state, sharedState, timelineElements)
+    updateZoom(xOffset, amount, state, sharedState, timelineElements)
   });
   timelineElements.timelineUICanvas.addEventListener("wheel", (e) => {
     e.preventDefault();
@@ -755,7 +756,7 @@ export const initTimeline = (
     }
     const inHandle = xOffset >= state.left && xOffset <= state.right;
     if (inHandle) {
-      adjustZoom(xOffset, amount, state, sharedState, timelineElements);
+      updateZoom(xOffset, amount, state, sharedState, timelineElements);
     }
   });
   timelineElements.overlayCanvas.addEventListener("pointerdown", (e) => {
@@ -865,7 +866,7 @@ export const initTimeline = (
           const dY = Math.abs(state.interactionStartY - e.offsetY);
           return dX > 4 || dY > 4;
         };
-        if (!state.scrubLocalStarted && !state.scrubLocalStarted && !state.pinchStarted && (!state.panStarted || (state.panStarted && !pointerMoved()))) {
+        if (!state.scrubLocalStarted && !state.scrubGlobalStarted && !state.pinchStarted && (!state.panStarted || (state.panStarted && !pointerMoved()))) {
           // Clicked without moving pointer
           root.dispatchEvent(new CustomEvent("select", {
             bubbles: false,

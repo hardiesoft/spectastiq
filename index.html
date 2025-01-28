@@ -30,46 +30,10 @@
 <body>
   <div class="container">
     <spectastiq-viewer id="spectastiq" src="robin-1.wav"></spectastiq-viewer>
-    <button class="src-button">
-      recording-2055766-05-01-2025--15-01-42.mp4
-    </button>
-    <button class="src-button">
-      20241107-214637.aac
-    </button>
-    <button class="src-button">
-      robin-1.wav
-    </button>
-    <button class="src-button">
-      test.mp3
-    </button>
-    <button class="src-button">
-      test.mp3
-    </button>
-    <button class="src-button">
-      051226-kakapo-billbooming.ogg
-    </button>
-    <button class="src-button">
-      /tomtits/Westland Tai Poutini National Park 6.m4a
-    </button>
-    <button class="src-button">
-      quail114277ecut.mp3
-    </button>
     <a class="link" href="https://github.com/hardiesoft/spectastiq">Spectastiq github repo</a>
   </div>
   <script>
     const spectastiq = document.getElementById("spectastiq");
-    const buttons =  document.querySelectorAll('.src-button');
-    buttons.forEach(button => {
-      button.addEventListener('click', (e) => {
-        spectastiq.src = e.target.innerText.trim();
-      });
-    });
-    spectastiq.addEventListener('spectastiq-ready', (e) => {
-      console.log(e);
-    });
-    spectastiq.addEventListener('spectastiq-audio-loaded', (e) => {
-      console.log(e);
-    });
   </script>
 </body>
 </html>

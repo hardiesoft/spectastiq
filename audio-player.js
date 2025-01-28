@@ -212,6 +212,14 @@ const pauseAudio = (state, { playButton, audio }) => {
   state.playing = false;
   audio.pause();
   playButton.classList.add("paused");
+
+  state.root.dispatchEvent(
+    new Event("playback-ended", {
+      bubbles: false,
+      composed: true,
+      cancelable: false,
+    })
+  );
 };
 
 const updatePlayhead = (

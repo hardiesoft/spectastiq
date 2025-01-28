@@ -66,6 +66,10 @@ interface SpectastiqReadyEvent extends Event {
   type: "ready";
 }
 
+interface SpectastiqPlaybackEndedEvent extends Event {
+  type: "playback-ended";
+}
+
 interface SpectastiqPointerMoveEvent extends CustomEvent<InteractionCoordinatesEvent> {
   type: "move";
 }
@@ -87,6 +91,7 @@ declare global {
     "audio-loaded": SpectastiqLoadedEvent;
     "ready": SpectastiqReadyEvent;
     "playhead-update": SpectastiqPlayheadEvent;
+    "playback-ended": SpectastiqPlaybackEndedEvent;
     "move": SpectastiqPointerMoveEvent;
     "select": SpectastiqSelectEvent;
     "region-create": SpectastiqRegionCreationEvent;
