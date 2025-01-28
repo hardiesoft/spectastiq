@@ -1,0 +1,9 @@
+
+
+# Added by cargo
+
+/target
+
+# wasm-pack likes to copy these files here, but we don't really want to duplicate them
+/pkg/package.json
+/pkg/README.md

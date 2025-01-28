@@ -36,7 +36,7 @@ if(typeof window === 'undefined') {
     }
 
     const headers = new Headers(r.headers);
-    headers.set("Cross-Origin-Embedder-Policy", "require-corp"); // or: require-corp
+    headers.set("Cross-Origin-Embedder-Policy", "require-corp");
     headers.set("Cross-Origin-Opener-Policy", "same-origin")
 
     return new Response(r.body, { status: r.status, statusText: r.statusText, headers });
@@ -48,6 +48,9 @@ if(typeof window === 'undefined') {
 
 } else {
   (async function() {
+    if (!navigator.serviceWorker || !navigator.serviceWorker.register) {
+      return;
+    }
     if(window.crossOriginIsolated !== false) return;
     let registration = await navigator.serviceWorker.register(window.document.currentScript.src).catch(e => console.error("COOP/COEP Service Worker failed to register:", e));
     if(registration) {
