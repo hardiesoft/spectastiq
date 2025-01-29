@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Spectastiq Example</title>
+  <title>Spectastiq Spectrogram Example</title>
   <style>
     body {
-        margin: 0;
+        margin: 30px 0 0 0;
         background: darkgrey;
         font-family: sans-serif;
         overflow: hidden;
@@ -20,51 +20,20 @@
         margin: 0 30px;
     }
   </style>
+  <!--
+    If the example is not served from a secure context that opts into `SharedArrayBuffer`,
+    this serves resources with those headers set.
+   -->
   <script src="./enable-threads.js" crossorigin></script>
   <script type="module" src="./spectastiq.js" crossorigin></script>
 </head>
 <body>
   <div class="container">
-    <spectastiq-viewer id="spectastiq" src="robin-1.wav">
-<!--      <div slot="player-controls">-->
-<!--        <button>Click me</button>-->
-<!--      </div>-->
-    </spectastiq-viewer>
-    <button class="src-button">
-      recording-2055766-05-01-2025--15-01-42.mp4
-    </button>
-    <button class="src-button">
-      20241107-214637.aac
-    </button>
-    <button class="src-button">
-      robin-1.wav
-    </button>
-    <button class="src-button">
-      test.mp3
-    </button>
-    <button class="src-button">
-      test.mp3
-    </button>
-    <button class="src-button">
-      051226-kakapo-billbooming.ogg
-    </button>
-    <button class="src-button">
-      /tomtits/Westland Tai Poutini National Park 6.m4a
-    </button>
-    <button class="src-button">
-      quail114277ecut.mp3
-    </button>
+    <spectastiq-viewer id="spectastiq" src="robin-1.wav"></spectastiq-viewer>
     <a class="link" href="https://github.com/hardiesoft/spectastiq">Spectastiq github repo</a>
   </div>
-  <div id="timings"></div>
   <script>
     const spectastiq = document.getElementById("spectastiq");
-    const buttons =  document.querySelectorAll('.src-button');
-    buttons.forEach(button => {
-      button.addEventListener('click', (e) => {
-        spectastiq.setAttribute("src", e.target.innerText.trim());
-      });
-    });
   </script>
 </body>
 </html>

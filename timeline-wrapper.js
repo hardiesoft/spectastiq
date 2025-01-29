@@ -1,9 +1,5 @@
 import { mapRange } from "./webgl-drawimage.js";
 
-export const adjustZoom = (pxRatio, amount, state, sharedState, timelineElements) => {
-  updateZoom(pxRatio, amount, state, sharedState, timelineElements);
-};
-
 const getMaxXZoom = (canvasWidth, state) => {
   const audioSamples = state.numAudioSamples;
   if (audioSamples) {
@@ -81,28 +77,33 @@ const updateZoom = (
     getMaxXZoom(timelineElements.canvas.width, state),
     state.zoomX
   );
-  // See how much zoom level has changed, and how much we have to distribute.
-  const visiblePortion = 1 / state.zoomX;
-  const invisiblePortion = 1 - visiblePortion; // How much offscreen to distribute.
-  // Distribute proportionally on either side of pX the increase in width/zoom.
-  const newWToDistribute = invisiblePortion - invisiblePortionI;
-  const leftShouldTake = newWToDistribute * pXRatio;
-  const rightShouldTake = newWToDistribute * (1 - pXRatio);
-  const prevLeft = state.left;
-  const prevRight = state.right;
+  if (state.zoomX === 1) {
+    state.left = 0;
+    state.right = 1;
+  } else {
+    // See how much zoom level has changed, and how much we have to distribute.
+    const visiblePortion = 1 / state.zoomX;
+    const invisiblePortion = 1 - visiblePortion; // How much offscreen to distribute.
+    // Distribute proportionally on either side of pX the increase in width/zoom.
+    const newWToDistribute = invisiblePortion - invisiblePortionI;
+    const leftShouldTake = newWToDistribute * pXRatio;
+    const rightShouldTake = newWToDistribute * (1 - pXRatio);
+    const prevLeft = state.left;
+    const prevRight = state.right;
 
-  state.left += leftShouldTake;
-  state.left = Math.max(0, state.left);
-  // NOTE: Balance out if one side took less than it's fair share.
-  const leftTook = state.left - prevLeft;
+    state.left += leftShouldTake;
+    state.left = Math.max(0, state.left);
+    // NOTE: Balance out if one side took less than it's fair share.
+    const leftTook = state.left - prevLeft;
 
-  state.right -= newWToDistribute * (1 - pXRatio);
-  state.right -= Math.min(0, leftShouldTake - leftTook);
-  state.right = Math.min(1, state.right);
+    state.right -= newWToDistribute * (1 - pXRatio);
+    state.right -= Math.min(0, leftShouldTake - leftTook);
+    state.right = Math.min(1, state.right);
 
-  // NOTE: If right didn't take everything it could, redistribute to the left.
-  const rightTook = prevRight - state.right;
-  state.left += Math.min(0, rightShouldTake - rightTook);
+    // NOTE: If right didn't take everything it could, redistribute to the left.
+    const rightTook = prevRight - state.right;
+    state.left += Math.min(0, rightShouldTake - rightTook);
+  }
 
   if (!sharedState.interacting) {
     const changeLeft = Math.abs(initialLeft - state.left);
@@ -569,6 +570,7 @@ const dragResize = (e, timelineElements, state, xOffsetZeroOne) => {
 };
 
 export const initTimeline = (
+  root,
   sharedState,
   timelineElements,
 ) => {
@@ -628,6 +630,10 @@ export const initTimeline = (
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
+    if (e.pointerType === "mouse" && e.button !== 0) {
+      // Only response to left mouse clicks
+      return;
+    }
     const xOffsetZeroOne = e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
     const {
       inResizeHandleLeft,
@@ -734,7 +740,7 @@ export const initTimeline = (
       // This is likely a trackpad pinch event (with real number values)
       amount = -e.deltaY * 0.01;
     }
-    adjustZoom(xOffset, amount, state, sharedState, timelineElements)
+    updateZoom(xOffset, amount, state, sharedState, timelineElements)
   });
   timelineElements.timelineUICanvas.addEventListener("wheel", (e) => {
     e.preventDefault();
@@ -750,7 +756,7 @@ export const initTimeline = (
     }
     const inHandle = xOffset >= state.left && xOffset <= state.right;
     if (inHandle) {
-      adjustZoom(xOffset, amount, state, sharedState, timelineElements);
+      updateZoom(xOffset, amount, state, sharedState, timelineElements);
     }
   });
   timelineElements.overlayCanvas.addEventListener("pointerdown", (e) => {
@@ -826,12 +832,14 @@ export const initTimeline = (
       }
     } else if (e.pointerType === "mouse" && e.pressure === 0) {
       // NOTE: Re-dispatch mousemove for user/client embed handling.
-      timelineElements.spectrogramContainer.dispatchEvent(new CustomEvent("spectastiq-pointermove", {
-        bubbles: true,
+      root.dispatchEvent(new CustomEvent("move", {
+        bubbles: false,
         composed: true,
+        cancelable: false,
         detail: {
           offsetX: e.offsetX,
           offsetY: e.offsetY,
+          container: timelineElements.spectrogramContainer
         }
       }));
     }
@@ -858,14 +866,16 @@ export const initTimeline = (
           const dY = Math.abs(state.interactionStartY - e.offsetY);
           return dX > 4 || dY > 4;
         };
-        if (!state.scrubLocalStarted && !state.scrubLocalStarted && !state.pinchStarted && (!state.panStarted || (state.panStarted && !pointerMoved()))) {
+        if (!state.scrubLocalStarted && !state.scrubGlobalStarted && !state.pinchStarted && (!state.panStarted || (state.panStarted && !pointerMoved()))) {
           // Clicked without moving pointer
-          timelineElements.spectrogramContainer.dispatchEvent(new CustomEvent("spectastiq-select", {
-            bubbles: true,
+          root.dispatchEvent(new CustomEvent("select", {
+            bubbles: false,
             composed: true,
+            cancelable: false,
             detail: {
               offsetX: e.offsetX,
               offsetY: e.offsetY,
+              container: timelineElements.spectrogramContainer
             }
           }));
         }
@@ -955,7 +965,7 @@ const clickOutsideHandle = (state, timelineElements, offsetXZeroOne) => {
     state.top,
     state.bottom,
     200,
-    (start, end, top, bottom, final) => {
+    (start, end, _top, _bottom, _final) => {
       state.left = start;
       state.right = end;
       timelineElements.overlayCanvas.dispatchEvent(
@@ -985,7 +995,7 @@ const animate = async (callback) => {
 
 const clamp = (val) => Math.min(1, Math.max(0, val));
 
-const smoothstep = (val) => {
+const smoothStep = (val) => {
   const t = clamp(val);
   return t * t * (3.0 - 2.0 * t);
 };
@@ -1016,7 +1026,7 @@ const animateToRange = async (
       // Map tt into zeroToOne space
       tt = performance.now();
       // Smoothly interpolate initialStart to targetStart over a given duration.
-      const t = smoothstep(mapRange(tt, startTime, endTime, 0, 1));
+      const t = smoothStep(mapRange(tt, startTime, endTime, 0, 1));
       const startT = Math.max(0, initialStart + startRange * t);
       const endT = Math.min(1, initialEnd + endRange * t);
       const topT = Math.min(1, initialTop + topRange * t);

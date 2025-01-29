@@ -1,0 +1,24 @@
+[package]
+name = "spectastiq"
+version = "0.9.0"
+edition = "2021"
+authors = ["jon hardie <jon@hardiesoft.com"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wasm-bindgen = "0.2.99"
+
+# Routing messages to the JS error console
+console_log = "1.0.0"
+log = "0.4.22"
+console_error_panic_hook = "0.1.7"
+rustfft = { version = "6.2.0", features = ["wasm_simd"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+debug = false
+panic = "abort"
+

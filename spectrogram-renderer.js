@@ -24,7 +24,6 @@ const getAudioObject = (fileBytes) => {
 };
 
 /**
- *
  * @param fileBytes {ArrayBuffer}
  * @param [previousState] {{ workers: WorkerPromise[], offlineAudioContext: OfflineAudioContext }}
  * @returns {Promise<{renderToContext: ((function(CanvasRenderingContext2D, CanvasRenderingContext2D, number, number, number, number, boolean): Promise<*>)|*), audioFileUrl: string, renderRange: (function(number, number, number, boolean): Promise<T>), numAudioSamples: number, terminate: terminate, invalidateCanvasCaches: invalidateCanvasCaches}>}
@@ -50,8 +49,6 @@ export const initSpectrogram = async (fileBytes, previousState) => {
   };
   await initWorkers(state);
   //const fileBytes = await (await fetch(filePath)).arrayBuffer();
-  // FIXME: In the event that we are truncating silence from the end of the audio file, we're still supplying the player
-  //  with the un-truncated version. Perhaps we can add a .wav RIFF header and supply the decoded array?
   const audioFileUrl = getAudioObject(fileBytes);
   const audioContext = (previousState && previousState.offlineAudioContext) || new OfflineAudioContext({
     length: 1024 * 1024,
@@ -123,15 +120,6 @@ const submitTexture = (state, ctx) => {
   return state.ctxs.get(ctx).submitTexture;
 };
 
-// VIRIDIS,
-//   PLASMA,
-//   INFERNO,
-//   MAGMA,
-//   GRAYSCALE,
-//   GRAYSCALE_SQUARED,
-//   GRAYSCALE_INVERTED,
-//   GRAYSCALE_SQUARED_INVERTED
-
 export const colorMaps = ["Viridis", "Plasma", "Inferno", "Grayscale"];
 const cyclePalette = (state) => {
   state.colorMap++;
@@ -200,14 +188,10 @@ const renderToContext =
   (state) =>
   async (
     ctx,
-    overlayCtx,
-    userOverlayCtx,
-    transformY,
     startZeroOne,
     endZeroOne,
     top,
-    bottom,
-    isMainCtx,
+    bottom
   ) => {
     // Figure out the best intermediate render to stretch.
     // Do we store the final coloured imagedata to stretch, or the FFT array data?
@@ -305,27 +289,6 @@ const renderToContext =
         state.cropAmountBottom,
         state.colorMap
       );
-
-      if (isMainCtx) {
-        userOverlayCtx.canvas.dispatchEvent(
-          new CustomEvent("render", {
-            bubbles: true,
-            composed: true,
-            detail: {
-              range: {
-                begin: startZeroOne,
-                end: endZeroOne,
-                min: bottom,
-                max: top,
-              },
-              sampleRate: state.actualSampleRate,
-              duration: state.sharedFloatData.length / 48000,
-              context: userOverlayCtx,
-              container: userOverlayCtx.canvas.parentElement.parentElement, // #spectrogram-container
-            },
-          })
-        );
-      }
       return state;
     }
   };
@@ -388,8 +351,6 @@ async function renderArrayBuffer(
   endSample
 ) {
   const widthChanged = canvasWidth !== state.canvasWidth;
-  const start = performance.now();
-
   const numChunks = numWorkers;
   const canvasChunkWidth = Math.ceil(canvasWidth / numChunks);
 
@@ -449,25 +410,6 @@ async function renderArrayBuffer(
   // FIXME - Only grab the maxes once, at startup? It's possible there are smaller sounds that aren't captured at that zoom
   //  level, and the max may need to be adjusted though.
   const results = await Promise.all(job);
-
-  const timings = document.getElementById("timings");
-  if (false && timings) {
-    state.timings = state.timings || [];
-    state.totalTimings = state.totalTimings || [];
-    state.timings.push(...results.map(({ time }) => time));
-    state.totalTimings.push(performance.now() - start);
-    timings.innerText = `Wasm took ${
-      state.timings[state.timings.length - 1]
-    } avg (${
-      state.timings.reduce((prev, curr) => {
-        return prev + curr;
-      }, 0) / state.timings.length
-    }), total: ${state.totalTimings[state.totalTimings.length - 1]}, avg (${
-      state.totalTimings.reduce((prev, curr) => {
-        return prev + curr;
-      }, 0) / state.totalTimings.length
-    })`;
-  }
   if (!state.max) {
     state.max = Math.max(...results.map(({ max }) => max));
   }
@@ -494,9 +436,6 @@ async function renderArrayBuffer(
     negs.sort();
     const clip = Math.min(negs[Math.floor(negs.length / 2)], FFT_WIDTH / 2);
     state.actualSampleRate = (((clip - 1) * 48000) / FFT_WIDTH) * 2;
-    console.log(
-      `Actual audio file response ${Math.round(state.actualSampleRate)}Khz`
-    );
     state.cropAmountTop = 1 - clip / (FFT_WIDTH / 2);
     // TODO: Crop off noise floor?
   }

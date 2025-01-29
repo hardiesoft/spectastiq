@@ -1,0 +1,30 @@
+{
+  "name": "spectastiq",
+  "version": "0.9.0",
+  "description": "An interactive spectrogram renderer and audio player, optimised for touch devices.",
+  "main": "spectastiq.js",
+  "module": "spectastiq.js",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hardiesoft/spectastiq.git"
+  },
+  "keywords": [
+    "spectrogram",
+    "sonogram",
+    "audio",
+    "sound",
+    "birdsong",
+    "sonograph",
+    "spectrograph",
+    "visualization",
+    "visualisation"
+  ],
+  "author": "Jon Hardie <jon@hardiesoft.com>",
+  "license": "MIT",
+  "types": "./spectastiq.d.ts",
+  "bugs": {
+    "url": "https://github.com/hardiesoft/spectastiq/issues"
+  },
+  "homepage": "https://github.com/hardiesoft/spectastiq#readme"
+}
