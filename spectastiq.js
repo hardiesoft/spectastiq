@@ -443,11 +443,9 @@ export default class Spectastiq extends HTMLElement {
       this.inverseTransformY = (yZeroOne) => {
         // How much to crop of the top and bottom of the spectrogram (used if the sample rate of the audio was different
         // from the sample rate the FFT was performed at, since that leaves a blank space at the top)
-        let y = 1 - yZeroOne;
-        const cropTop = cropAmountTop;
+        let y = 1 - Math.min(1, Math.max(0, yZeroOne));
         const top = timelineState.top;
         const bottom = timelineState.bottom;
-        const cropBottom = 1;
         const maxZoom =
           1024 / (this.timelineElements.canvas.height / devicePixelRatio);
         const maxYZoom = maxZoom * 0.8;
@@ -478,8 +476,6 @@ export default class Spectastiq extends HTMLElement {
         } else if (aboveRange) {
           y = map(y, selectedTop, 1.0, top, 1.0);
         }
-
-        y = map(y, 0.0, 1.0, cropTop, cropBottom);
         return y;
       };
       let cropAmountTop = 0;
@@ -820,9 +816,10 @@ export default class Spectastiq extends HTMLElement {
       clearOverlay();
       redrawOverlay(timelineState, this.actualSampleRate);
       const ctx = overlayCanvas.getContext("2d");
-      ctx.setLineDash([5, 5]);
+      ctx.setLineDash([5 * devicePixelRatio, 5 * devicePixelRatio]);
+      ctx.lineWidth = 1 * devicePixelRatio;
       ctx.strokeStyle = "white";
-      ctx.strokeRect(left, top, right - left, bottom - top);
+      ctx.strokeRect(left * devicePixelRatio, top * devicePixelRatio, (right - left) * devicePixelRatio, (bottom - top) * devicePixelRatio);
     });
     overlayCanvas.addEventListener("custom-region-create", (e) => {
       clearOverlay();
@@ -843,6 +840,8 @@ export default class Spectastiq extends HTMLElement {
         this.inverseTransformY(bottomZeroOne) * (this.actualSampleRate / 2);
       const maxFreqHz =
         this.inverseTransformY(topZeroOne) * (this.actualSampleRate / 2);
+
+
       this.shadowRoot.dispatchEvent(
         new CustomEvent("region-create", {
           detail: {
@@ -1033,7 +1032,9 @@ export default class Spectastiq extends HTMLElement {
           const startZeroOne = timelineState.left;
           const endZeroOne = timelineState.right;
           drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
-          redrawOverlay(timelineState, this.actualSampleRate);
+          if (this.actualSampleRate) {
+            redrawOverlay(timelineState, this.actualSampleRate);
+          }
           if (!audioState.playing) {
             audioState.progressSampleTime = performance.now();
             updatePlayhead();
