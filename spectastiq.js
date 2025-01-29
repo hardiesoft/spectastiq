@@ -443,11 +443,9 @@ export default class Spectastiq extends HTMLElement {
       this.inverseTransformY = (yZeroOne) => {
         // How much to crop of the top and bottom of the spectrogram (used if the sample rate of the audio was different
         // from the sample rate the FFT was performed at, since that leaves a blank space at the top)
-        let y = 1 - yZeroOne;
-        const cropTop = cropAmountTop;
+        let y = 1 - Math.min(1, Math.max(0, yZeroOne));
         const top = timelineState.top;
         const bottom = timelineState.bottom;
-        const cropBottom = 1;
         const maxZoom =
           1024 / (this.timelineElements.canvas.height / devicePixelRatio);
         const maxYZoom = maxZoom * 0.8;
@@ -478,8 +476,6 @@ export default class Spectastiq extends HTMLElement {
         } else if (aboveRange) {
           y = map(y, selectedTop, 1.0, top, 1.0);
         }
-
-        y = map(y, 0.0, 1.0, cropTop, cropBottom);
         return y;
       };
       let cropAmountTop = 0;
@@ -496,6 +492,7 @@ export default class Spectastiq extends HTMLElement {
 
           if (this.deferredWidth && ctx.canvas.width !== this.deferredWidth) {
             this.resizeCanvases(this.deferredWidth, true);
+            this.timelineElements.container.classList.remove("disabled");
           }
 
           drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
@@ -695,7 +692,7 @@ export default class Spectastiq extends HTMLElement {
       playheadCanvasCtx: playheadCanvas.getContext("2d"),
       mainPlayheadCanvasCtx: mainPlayheadCanvas.getContext("2d"),
     };
-    const resizeCanvas = (canvas, width, height, forReal) => {
+    const resizeCanvas = (canvas, width, height, forReal = true) => {
       canvas.style.height = `${height}px`;
       // NOTE: Defer resizing the backing canvas until we actually want to draw to it, this makes resizes look better.
       if (!this.resizeInited || forReal) {
@@ -819,9 +816,10 @@ export default class Spectastiq extends HTMLElement {
       clearOverlay();
       redrawOverlay(timelineState, this.actualSampleRate);
       const ctx = overlayCanvas.getContext("2d");
-      ctx.setLineDash([5, 5]);
+      ctx.setLineDash([5 * devicePixelRatio, 5 * devicePixelRatio]);
+      ctx.lineWidth = 1 * devicePixelRatio;
       ctx.strokeStyle = "white";
-      ctx.strokeRect(left, top, right - left, bottom - top);
+      ctx.strokeRect(left * devicePixelRatio, top * devicePixelRatio, (right - left) * devicePixelRatio, (bottom - top) * devicePixelRatio);
     });
     overlayCanvas.addEventListener("custom-region-create", (e) => {
       clearOverlay();
@@ -842,6 +840,8 @@ export default class Spectastiq extends HTMLElement {
         this.inverseTransformY(bottomZeroOne) * (this.actualSampleRate / 2);
       const maxFreqHz =
         this.inverseTransformY(topZeroOne) * (this.actualSampleRate / 2);
+
+
       this.shadowRoot.dispatchEvent(
         new CustomEvent("region-create", {
           detail: {
@@ -1012,19 +1012,19 @@ export default class Spectastiq extends HTMLElement {
     this.resizeCanvases = (resizedWidth, forReal) => {
       const width = resizedWidth || container.getBoundingClientRect().width;
       resizeCanvas(this.timelineElements.canvas, width, 300, forReal);
-      resizeCanvas(this.timelineElements.overlayCanvas, width, 300, forReal);
+      resizeCanvas(this.timelineElements.overlayCanvas, width, 300, true);
       resizeCanvas(
         this.timelineElements.userOverlayCanvas,
         width,
         300,
-        forReal
+        true
       );
 
       resizeCanvas(this.timelineElements.mapCanvas, width, 60, forReal);
-      resizeCanvas(this.timelineElements.timelineUICanvas, width, 60, forReal);
+      resizeCanvas(this.timelineElements.timelineUICanvas, width, 60, true);
 
-      resizeCanvas(this.playerElements.mainPlayheadCanvas, width, 300, forReal);
-      resizeCanvas(this.playerElements.playheadCanvas, width, 60, forReal);
+      resizeCanvas(this.playerElements.mainPlayheadCanvas, width, 300, true);
+      resizeCanvas(this.playerElements.playheadCanvas, width, 60, true);
 
       const wasTriggeredByResizeEvent = !!resizedWidth;
       if (wasTriggeredByResizeEvent && !!this.resizeInited) {
@@ -1032,6 +1032,9 @@ export default class Spectastiq extends HTMLElement {
           const startZeroOne = timelineState.left;
           const endZeroOne = timelineState.right;
           drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+          if (this.actualSampleRate) {
+            redrawOverlay(timelineState, this.actualSampleRate);
+          }
           if (!audioState.playing) {
             audioState.progressSampleTime = performance.now();
             updatePlayhead();
@@ -1042,20 +1045,18 @@ export default class Spectastiq extends HTMLElement {
         clearTimeout(this.sharedState.interactionTimeout);
         this.sharedState.interactionTimeout = setTimeout(() => {
           this.invalidateCanvasCaches && this.invalidateCanvasCaches();
-
-          // TODO: Might be better to pass the render function into render range, rather than yielding via async?
-          //  Probably makes no difference in this instance, since this is truly async via a worker.
           this.renderRange &&
             this.renderRange(0, 1, canvas.width, true).then(() => {
               this.render({ detail: { initialRender: true, force: true } });
-              this.timelineElements.container.classList.remove("disabled");
             });
           this.sharedState.interacting = false;
         }, 300);
       }
     };
     const resizeObserver = new ResizeObserver((entries) => {
-      this.resizeCanvases(entries[0].contentRect.width);
+      // We'll defer resizing the spectrogram backing canvas until a new spectrogram has been created at the new
+      // width and is ready to render.
+      this.resizeCanvases(entries[0].contentRect.width, false);
     });
     resizeObserver.observe(container);
 
