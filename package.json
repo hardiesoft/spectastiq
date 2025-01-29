@@ -1,6 +1,6 @@
 {
   "name": "spectastiq",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "An interactive spectrogram renderer and audio player, optimised for touch devices.",
   "main": "spectastiq.js",
   "module": "spectastiq.js",
@@ -9,6 +9,22 @@
     "type": "git",
     "url": "git+https://github.com/hardiesoft/spectastiq.git"
   },
+  "files": [
+    "spectastiq.js",
+    "spectastiq-worker.js",
+    "spectastiq.d.ts",
+    "spectrogram-renderer.js",
+    "audio-player.js",
+    "enable-threads.js",
+    "colormaps.js",
+    "timeline-wrapper.js",
+    "webgl-drawimage.js",
+    "pkg/",
+    "pkg/spectastiq_bg.wasm",
+    "pkg/spectastiq_bg.wasm.d.ts",
+    "pkg/spectastiq.d.ts",
+    "pkg/spectastiq.js"
+  ],
   "keywords": [
     "spectrogram",
     "sonogram",
