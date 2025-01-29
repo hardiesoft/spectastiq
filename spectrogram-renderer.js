@@ -5,10 +5,8 @@ const HEIGHT = FFT_WIDTH / 2; // Height needs to be at half the FFT width.
 const numWorkers = (navigator.hardwareConcurrency || 2) - 1;
 async function initWorkers(state) {
   if (state.workers.length === 0) {
-    const currentWorkingDir = import.meta.url.split("/");
-    currentWorkingDir.pop();
     const wasm = await (
-      await fetch(currentWorkingDir.join("/") + "/pkg/spectastiq_bg.wasm")
+      await fetch(new URL("./pkg/spectastiq_bg.wasm", import.meta.url))
     ).arrayBuffer();
     const initWorkers = [];
     for (let i = 0; i < numWorkers; i++) {
