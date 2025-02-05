@@ -368,7 +368,7 @@ export const drawTimelineUI =
   (timelineElements, state) => (startZeroOne, endZeroOne, currentAction) => {
     // Draw handles on timelineUICanvas.
     const isDarkTheme = state.isDarkTheme;
-    const c = isDarkTheme ? 255 : 50;
+    const c = isDarkTheme ? 34 : 50;
     const ctx = timelineElements.timelineUICanvas.getContext("2d");
     const width = ctx.canvas.width;
     const height = ctx.canvas.height;
@@ -377,14 +377,38 @@ export const drawTimelineUI =
     const onePx = devicePixelRatio;
     const halfPx = 0.5 * devicePixelRatio;
     const twoPx = 2 * devicePixelRatio;
-    const fivePx = 5 * devicePixelRatio;
     const threePx = 3 * devicePixelRatio;
     const handleWidth = (end - start) - onePx;
     const minHandleWidth = 44 * devicePixelRatio;
     const handleIsNarrow = handleWidth < minHandleWidth
 
-    const resizeHandleAt = (x) => {
-      ctx.roundRect(x, handleHeight / 2, resizeHandleWidth, handleHeight, fivePx);
+    const resizeHandleAt = (x, color, cX) => {
+      const y = (height / 2) - handleHeight / 2;
+      const halfWidth = resizeHandleWidth / 2;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      const atStart = x < halfWidth;
+
+      const atEnd = (x + resizeHandleWidth) > width - halfWidth;
+      if (atStart || atEnd) {
+        if (atStart) {
+          ctx.roundRect(x, y, resizeHandleWidth, handleHeight, [cX, halfWidth, halfWidth, cX]);
+        } else {
+          ctx.roundRect(x, y, resizeHandleWidth, handleHeight, [halfWidth, cX, cX, halfWidth]);
+        }
+        ctx.roundRect(x, y, resizeHandleWidth, handleHeight, halfWidth);
+      } else {
+        ctx.roundRect(x, y, resizeHandleWidth, handleHeight, halfWidth);
+      }
+      ctx.fill();
+      ctx.fillStyle = isDarkTheme ? "#666" : "#ccc";
+      ctx.beginPath();
+      const circleX = (x + halfWidth) - (1.5 * devicePixelRatio);
+      const circleC = 3 * devicePixelRatio;
+      ctx.roundRect(circleX, y + (4.5 * devicePixelRatio), circleC, circleC, circleC * 0.5);
+      ctx.roundRect(circleX, y + (10.5 * devicePixelRatio), circleC, circleC, circleC * 0.5);
+      ctx.roundRect(circleX, y + (16.5 * devicePixelRatio), circleC, circleC, circleC * 0.5);
+      ctx.fill();
     };
 
     ctx.clearRect(0, 0, width, height);
@@ -453,64 +477,31 @@ export const drawTimelineUI =
     ctx.stroke();
 
     // Draw resize handles
-    const resizeHandleWidth = 20 * devicePixelRatio;
-    const handleHeight = height / 2;
-    if (currentAction === "resize-left" || currentAction === "resize-right") {
-      // NOTE: Resize handles should only be able to come with 44px(css) of each other, leaving a grab area in the middle.
-      if (currentAction === "resize-left") {
-        // Draw left resize handle
-        ctx.fillStyle = `rgba(${c}, ${c}, ${c}, 1)`;
-        ctx.beginPath();
-        if (handleWidth > minHandleWidth * 2) {
-          resizeHandleAt(Math.max(0, start - resizeHandleWidth * 0.5));
-        } else {
-          resizeHandleAt(Math.max(0, start - resizeHandleWidth * 0.5) + (handleWidth / 2 - minHandleWidth));
-        }
-        ctx.fill();
-
-        // Draw right resize handle
-        ctx.fillStyle = `rgba(${c}, ${c}, ${c}, 0.75)`;
-        ctx.beginPath();
-        if (handleWidth > minHandleWidth * 2) {
-          resizeHandleAt(Math.min(width - resizeHandleWidth, (end - resizeHandleWidth * 0.5)) - onePx);
-        } else {
-          resizeHandleAt(Math.min(width - resizeHandleWidth, (end - resizeHandleWidth * 0.5) - (handleWidth / 2 - minHandleWidth)));
-        }
-        ctx.fill();
-      }
-      else if (currentAction === "resize-right") {
-        // Draw right resize handle
-        ctx.fillStyle = `rgba(${c}, ${c}, ${c}, 1)`;
-        ctx.beginPath();
-        if (handleWidth > minHandleWidth * 2) {
-          resizeHandleAt(Math.min(width - resizeHandleWidth, (end - resizeHandleWidth * 0.5)) - onePx);
-        } else {
-          resizeHandleAt(Math.min(width - resizeHandleWidth, (end - resizeHandleWidth * 0.5) - (handleWidth / 2 - minHandleWidth)));
-        }
-        ctx.fill();
-
-        // Draw left resize handle
-        ctx.fillStyle = `rgba(${c}, ${c}, ${c}, 0.75)`;
-        ctx.beginPath();
-        if (handleWidth > minHandleWidth * 2) {
-          resizeHandleAt(Math.max(0, start - resizeHandleWidth * 0.5));
-        } else {
-          resizeHandleAt(Math.max(0, (start - resizeHandleWidth * 0.5) + (handleWidth / 2 - minHandleWidth)));
-        }
-        ctx.fill();
-      }
+    const resizeHandleWidth = 8 * devicePixelRatio;
+    const handleHeight = 24 * devicePixelRatio;
+    const unselectedHandleColor = isDarkTheme ? "#b1b2b5" : "#595959";
+    const selectedHandleColor = isDarkTheme ? "#cccdd1" : "#333333";
+    const leftHandleColour = currentAction === "resize-left" ? selectedHandleColor : unselectedHandleColor;
+    const rightHandleColour = currentAction === "resize-right" ? selectedHandleColor : unselectedHandleColor;
+    const halfWidth = resizeHandleWidth / 2;
+    let leftX;
+    const leftC = Math.min(halfWidth, halfWidth - Math.min(halfWidth, halfWidth - start));
+    let rightC = Math.min(halfWidth, halfWidth - Math.min(halfWidth, halfWidth - (width - end)));
+    if (handleWidth > minHandleWidth * 2) {
+      leftX = Math.max(0, start - resizeHandleWidth * 0.5);
     } else {
-      ctx.fillStyle = `rgba(${c}, ${c}, ${c}, 0.75)`;
-      ctx.beginPath();
-      if (handleWidth > minHandleWidth * 2) {
-        resizeHandleAt(Math.max(0, start - resizeHandleWidth * 0.5));
-        resizeHandleAt(Math.min(width - resizeHandleWidth, (end - resizeHandleWidth * 0.5)) - onePx)
-      } else {
-        resizeHandleAt(Math.max(0, (start - resizeHandleWidth * 0.5) + (handleWidth / 2 - minHandleWidth)));
-        resizeHandleAt(Math.min(width - resizeHandleWidth, (end - resizeHandleWidth * 0.5) - (handleWidth / 2 - minHandleWidth)));
-      }
-      ctx.fill();
+      leftX = Math.max(0, start - resizeHandleWidth * 0.5) + (handleWidth / 2 - minHandleWidth);
     }
+    let rightX;
+    if (handleWidth > minHandleWidth * 2) {
+      rightX = Math.min(width - resizeHandleWidth, (end - resizeHandleWidth * 0.5)) - onePx;
+    } else {
+      rightX = Math.min(width - resizeHandleWidth, (end - resizeHandleWidth * 0.5) - (handleWidth / 2 - minHandleWidth));
+    }
+    // Draw left resize handle
+    resizeHandleAt(leftX, leftHandleColour, leftC);
+    // Draw right resize handle
+    resizeHandleAt(rightX, rightHandleColour, rightC);
   };
 
 const startHandleResize = (e, timelineElements, state, xOffset, action) => {

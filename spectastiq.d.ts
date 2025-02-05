@@ -11,7 +11,7 @@ declare class Spectastiq extends HTMLElement {
   exitRegionCreationMode: () => void;
   resetYZoom: () => void;
   transformY: (y: number) => number;
-  togglePlayback: () => boolean;
+  togglePlayback: () => Promise<boolean>;
   setGain: (gain: number) => number;
   nextPalette: () => string;
 }

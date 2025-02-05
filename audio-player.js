@@ -102,11 +102,14 @@ const removeBandPass = (biQuadFilterNode) => {
 };
 
 const setBandPass = (biQuadFilterNode, minFreq, maxFreq) => {
+  minFreq = Math.min(maxFreq, Math.max(100, minFreq));
   biQuadFilterNode.type = "bandpass";
-  const freqCenter = Math.sqrt(maxFreq * minFreq);
-  const freqDelta = maxFreq - minFreq;
+  const freqCenter = minFreq + (maxFreq - minFreq) * 0.5;
+  const freqDelta = Math.max(100, maxFreq - minFreq);
+  // This is how "wide" the filter bell-curve is around the center as a ratio?
+  const QFactor = freqCenter / freqDelta;
   biQuadFilterNode.frequency.value = freqCenter;
-  biQuadFilterNode.Q.value = freqCenter / freqDelta;
+  biQuadFilterNode.Q.value = QFactor;
 };
 
 const setGain = (gainNode, volume) => {
@@ -129,7 +132,7 @@ const endPlayheadDrag = (
   playerElements
 ) => {
   if (state.wasPlaying) {
-    playAudio(state, timelineState, sharedState, playerElements);
+    playAudio(state, timelineState, sharedState, playerElements).then(() => {});
   }
 };
 
@@ -143,8 +146,8 @@ const dragGlobalPlayhead = (xZeroOne, state, timelineState, sharedState, playerE
     state.dragPlayheadRaf = requestAnimationFrame(async () => {
       state.audioProgressZeroOne = thisOffsetXZeroOne;
       state.progressSampleTime = performance.now();
-      updatePlayhead(state, timelineState, sharedState, playerElements);
       setPlaybackTime(thisOffsetXZeroOne, state, playerElements);
+      updatePlayhead(state, timelineState, sharedState, playerElements);
     });
 };
 
@@ -168,8 +171,8 @@ const dragLocalPlayhead = (
     state.dragPlayheadRaf = requestAnimationFrame(async () => {
       state.audioProgressZeroOne = thisOffsetXZeroOne;
       state.progressSampleTime = performance.now();
-      updatePlayhead(state, timelineState, sharedState, playerElements);
       setPlaybackTime(thisOffsetXZeroOne, state, playerElements);
+      updatePlayhead(state, timelineState, sharedState, playerElements);
     });
 };
 
@@ -199,13 +202,15 @@ export const initAudio = async (playerElements, audioFileUrl, state, audioDurati
   });
 };
 
-const playAudio = (state, timelineState, sharedState, playerElements) => {
-  state.playing = true;
-  state.audioContext.resume();
-  playerElements.audio.play();
-  state.progressSampleTime = performance.now();
-  playerElements.playButton.classList.remove("paused");
-  updatePlayhead(state, timelineState, sharedState, playerElements, true);
+const playAudio = async (state, timelineState, sharedState, playerElements) => {
+  if (!state.playing) {
+    await state.audioContext.resume();
+    await playerElements.audio.play();
+    state.playing = true;
+    state.progressSampleTime = performance.now();
+    playerElements.playButton.classList.remove("paused");
+    updatePlayhead(state, timelineState, sharedState, playerElements, true);
+  }
 };
 const pauseAudio = (state, { playButton, audio }) => {
   cancelAnimationFrame(state.audioStatusPoll);
@@ -332,9 +337,9 @@ const updatePlayhead = (
   }
 };
 
-const togglePlayback = (state, timelineState, sharedState, playerElements) => {
+const togglePlayback = async (state, timelineState, sharedState, playerElements) => {
   if (!state.playing) {
-    playAudio(state, timelineState, sharedState, playerElements);
+    await playAudio(state, timelineState, sharedState, playerElements);
   } else {
     pauseAudio(state, playerElements);
   }

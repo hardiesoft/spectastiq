@@ -264,6 +264,7 @@ export default class Spectastiq extends HTMLElement {
   }
 
   unload() {
+    this.requestAborted = true;
     this.terminateExistingState && this.terminateExistingState();
     this.terminateExistingState = null;
   }
@@ -271,6 +272,15 @@ export default class Spectastiq extends HTMLElement {
   loadSrc(src) {
     const startTimeOffset = Number(this.getAttribute("start")) || 0;
     const endTimeOffset = Number(this.getAttribute("end")) || 1;
+    const requestHeaders = this.getAttribute("request-headers");
+    let headers = {};
+    if (requestHeaders) {
+      try {
+        headers = JSON.parse(requestHeaders);
+      } catch (e) {
+        console.error(`Malformed JSON passed for request headers: ${e}`);
+      }
+    }
     const { drawTimelineUI, redrawOverlay, timelineState, setInitialZoom } =
       this.timeline;
     const { audioState, updatePlayhead } = this.audioPlayer;
@@ -288,7 +298,6 @@ export default class Spectastiq extends HTMLElement {
     };
     this.sharedState.interacting = false;
     (async () => {
-      // TODO: We don't *need* to reinit workers, only unload them on disconnect.
       this.unload();
       this.beginLoad();
 
@@ -297,296 +306,238 @@ export default class Spectastiq extends HTMLElement {
       {
         const chunks = [];
         let receivedLength = 0;
-        const downloadAudioResponse = await fetch(src);
-        const reader = downloadAudioResponse.body.getReader();
-        const expectedLength = parseInt(
-          downloadAudioResponse.headers.get("Content-Length")
-        );
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            break;
-          }
-          chunks.push(value);
-          receivedLength += value.length;
-          if (!isNaN(expectedLength)) {
-            const progress = receivedLength / expectedLength;
-            this.progressBar.setAttribute("value", String(progress * 100));
-            if (progress === 1) {
-              if (this.progressBar.parentElement) {
-                this.progressBar.parentElement.removeChild(this.progressBar);
-              }
-            }
-          }
+        this.requestAborted = false;
+        if (this.abortController) {
+          this.abortController.abort("User aborted");
         }
-        const fileBytesReceived = new Uint8Array(receivedLength);
-        let position = 0;
-        for (const chunk of chunks) {
-          fileBytesReceived.set(chunk, position);
-          position += chunk.length;
-        }
-        fileBytes = fileBytesReceived.buffer;
-      }
-
-      const {
-        renderRange,
-        renderToContext,
-        audioFileUrl,
-        numAudioSamples,
-        invalidateCanvasCaches,
-        unloadAudio,
-        terminateWorkers,
-        cyclePalette,
-        persistentSpectrogramState,
-      } = await initSpectrogram(
-        fileBytes,
-        this.persistentSpectrogramState || null
-      );
-      timelineState.numAudioSamples = numAudioSamples;
-      timelineState.left = 0;
-      timelineState.top = 1;
-      timelineState.bottom = 0;
-      timelineState.right = 1;
-      timelineState.zoomX = 1;
-      timelineState.pinchStarted = false;
-      timelineState.panStarted = false;
-      timelineState.initialPinchXLeftZeroOne = 0;
-      timelineState.initialPinchXRightZeroOne = 1;
-      timelineState.currentAction = null;
-      if (audioState.playing) {
-        audioState.togglePlayback();
-      }
-      audioState.followPlayhead = false;
-      this.persistentSpectrogramState = persistentSpectrogramState;
-      this.terminateExistingState = unloadAudio;
-      this.terminateWorkers = terminateWorkers;
-      this.invalidateCanvasCaches = invalidateCanvasCaches;
-      this.renderRange = renderRange;
-
-      const defaultPalette = "Viridis";
-      // Select starting palette
-      let palette =
-        this.getAttribute("color-scheme") ||
-        this.getAttribute("colour-scheme") ||
-        defaultPalette;
-      if (
-        !colorMaps.map((p) => p.toLowerCase()).includes(palette.toLowerCase())
-      ) {
-        console.error(
-          `Unknown color scheme: ${palette}. Allowed schemes are any of '${colorMaps.join(
-            "', '"
-          )}'`
-        );
-        palette = defaultPalette;
-      }
-      let paletteChangeTimeout;
-      this.nextPalette = () => {
-        const nextPalette = cyclePalette();
-        // Give downstream renderers a moment to adjust to palette changes;
-        clearTimeout(paletteChangeTimeout);
-        paletteChangeTimeout = setTimeout(() => {
-          timelineState.isDarkTheme = nextPalette !== "Grayscale";
-          const startZeroOne = timelineState.left;
-          const endZeroOne = timelineState.right;
-          const top = timelineState.top;
-          const bottom = timelineState.bottom;
-          drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
-          renderToContext(ctx, startZeroOne, endZeroOne, top, bottom);
-          renderToContext(mapCtx, 0, 1, 1, 0);
-          audioState.progressSampleTime = performance.now();
-          updatePlayhead();
-          if (this.actualSampleRate) {
-            redrawOverlay(timelineState, this.actualSampleRate);
-          }
-        }, 10);
-        return nextPalette;
-      };
-      while (this.nextPalette().toLowerCase() !== palette.toLowerCase()) {
-        // Cycle until we get the desired palette
-      }
-      this.transformY = (y) => {
-        const top = timelineState.top;
-        const bottom = timelineState.bottom;
-        // Is the incoming y within the clampedRangeY?
-        const maxYZoom =
-          (TEXTURE_HEIGHT / (canvas.height / window.devicePixelRatio)) *
-          MAX_ZOOMED_REGION;
-        const rangeY = top - bottom;
-        const minRangeY =
-          1 / (TEXTURE_HEIGHT / (canvas.height / window.devicePixelRatio));
-
-        // The input height of the selected region.
-        const clampedRangeY = Math.max(rangeY, minRangeY);
-        const posY = bottom / Math.max(0.000001, 1 - rangeY);
-        const rem = 1 - clampedRangeY;
-        const inBottom = rem * posY;
-        const inTop = inBottom + clampedRangeY;
-
-        const mMaxZoom = map(clampedRangeY, 1, minRangeY, 1, 1 / maxYZoom);
-        const actualHeight = clampedRangeY * (1 / mMaxZoom);
-        const remainder = 1 - actualHeight;
-        const selectedBottom = remainder * posY;
-        const selectedTop = selectedBottom + actualHeight;
-
-        const aboveRange = y > inTop;
-        const belowRange = y < inBottom;
-        const inRange = y <= inTop && y >= inBottom;
-        if (inRange) {
-          y = map(y, inBottom, inTop, selectedBottom, selectedTop);
-        } else if (belowRange) {
-          y = map(y, 0, inBottom, 0, selectedBottom);
-        } else if (aboveRange) {
-          y = map(y, inTop, 1.0, selectedTop, 1.0);
-        }
-        return y;
-      };
-      this.inverseTransformY = (yZeroOne) => {
-        // How much to crop of the top and bottom of the spectrogram (used if the sample rate of the audio was different
-        // from the sample rate the FFT was performed at, since that leaves a blank space at the top)
-        let y = 1 - Math.min(1, Math.max(0, yZeroOne));
-        const top = timelineState.top;
-        const bottom = timelineState.bottom;
-        const maxZoom =
-          1024 / (this.timelineElements.canvas.height / devicePixelRatio);
-        const maxYZoom = maxZoom * 0.8;
-        const minRangeY = 1.0 / maxZoom;
-        const rangeY = top - bottom;
-        const clampedRangeY = Math.max(rangeY, minRangeY);
-        // Prevent divide by zero
-        const posY = bottom / Math.max(0.000001, 1.0 - rangeY);
-        const mMaxZoom = map(
-          clampedRangeY,
-          1.0,
-          minRangeY,
-          1.0,
-          1.0 / maxYZoom
-        );
-        const actualHeight = clampedRangeY * (1.0 / mMaxZoom);
-        const remainder = 1.0 - actualHeight;
-        const selectedBottom = remainder * posY;
-        const selectedTop = selectedBottom + actualHeight;
-        const aboveRange = y > selectedTop;
-        const belowRange = y < selectedBottom;
-        const inRange = y <= selectedTop && y >= selectedBottom;
-
-        if (inRange) {
-          y = map(y, selectedBottom, selectedTop, bottom, top);
-        } else if (belowRange) {
-          y = map(y, 0.0, selectedBottom, 0.0, bottom);
-        } else if (aboveRange) {
-          y = map(y, selectedTop, 1.0, top, 1.0);
-        }
-        return y;
-      };
-      let cropAmountTop = 0;
-      this.render = ({ detail: { initialRender, force } }) => {
-        if (this.raf) {
-          cancelAnimationFrame(this.raf);
-          this.raf = undefined;
-        }
-        this.raf = requestAnimationFrame(() => {
-          const startZeroOne = timelineState.left;
-          const endZeroOne = timelineState.right;
-          const top = timelineState.top;
-          const bottom = timelineState.bottom;
-
-          if (this.deferredWidth && ctx.canvas.width !== this.deferredWidth) {
-            this.resizeCanvases(this.deferredWidth, true);
-            this.timelineElements.container.classList.remove("disabled");
-          }
-
-          drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
-          if (!audioState.playing) {
-            audioState.progressSampleTime = performance.now();
-            updatePlayhead();
-          }
-
-          // Render the stretched version
-          renderToContext(ctx, startZeroOne, endZeroOne, top, bottom).then(
-            (s) => {
-              if (!!s) {
-                this.shadowRoot.dispatchEvent(
-                  new CustomEvent("render", {
-                    bubbles: false,
-                    composed: true,
-                    cancelable: false,
-                    detail: {
-                      range: {
-                        begin: startZeroOne,
-                        end: endZeroOne,
-                        min: bottom,
-                        max: top,
-                      },
-                      context: userOverlayCtx,
-                    },
-                  })
-                );
-              }
-            }
+        this.abortController = new AbortController();
+        this.abortController.signal.addEventListener("onabort", (e) => {
+          this.requestAborted = true;
+        });
+        const requestInfo = {
+          mode: "cors",
+          cache: "no-cache",
+          method: "get",
+          signal: this.abortController.signal,
+          headers: {
+            ...headers,
+          },
+        };
+        let downloadAudioResponse;
+        try {
+          downloadAudioResponse = await fetch(src, requestInfo);
+          const reader = downloadAudioResponse.body.getReader();
+          let expectedLength = parseInt(
+            downloadAudioResponse.headers.get("Content-Length"), 10
           );
-          if (initialRender) {
-            renderToContext(mapCtx, 0, 1, 1, 0);
+          if (isNaN(expectedLength)) {
+            expectedLength = parseInt(downloadAudioResponse.headers.get("Fallback-Content-Length"), 10);
           }
-
-          if (!this.sharedState.interacting || initialRender) {
-            // Render the fine detail of the zoom level and then fill it in when available.
-            renderRange(startZeroOne, endZeroOne, canvas.width, force).then(
-              (rangeCropInfo) => {
-                if (rangeCropInfo && rangeCropInfo.cropAmountTop) {
-                  cropAmountTop = rangeCropInfo.cropAmountTop;
-                  this.actualSampleRate = rangeCropInfo.actualSampleRate;
+          if (!isNaN(expectedLength)) {
+            if (!this.progressBar.parentElement) {
+              this.timelineElements.spectrogramContainer.appendChild(this.progressBar);
+            }
+          }
+          while (!this.requestAborted) {
+            const { done, value } = await reader.read();
+            if (done) {
+              break;
+            }
+            chunks.push(value);
+            receivedLength += value.length;
+            if (!isNaN(expectedLength)) {
+              const progress = receivedLength / expectedLength;
+              this.progressBar.setAttribute("value", String(progress * 100));
+              if (progress === 1) {
+                if (this.progressBar.parentElement) {
+                  this.progressBar.parentElement.removeChild(this.progressBar);
                 }
-                if (initialRender) {
-                  renderToContext(mapCtx, 0, 1, 1, 0).then(() => {
-                    if (
-                      this.loadingSpinner &&
-                      this.loadingSpinner.parentElement
-                    ) {
-                      this.loadingSpinner.parentElement.removeChild(
-                        this.loadingSpinner
-                      );
-                      this.playerElements.playButton.removeAttribute(
-                        "disabled"
-                      );
-                      this.shadowRoot.dispatchEvent(
-                        new CustomEvent("audio-loaded", {
-                          composed: true,
-                          bubbles: false,
-                          cancelable: false,
-                          detail: {
-                            sampleRate: this.actualSampleRate,
-                            duration: numAudioSamples / 48000,
-                          },
-                        })
-                      );
-                      this.endLoad();
-                    }
-                  });
-                }
-                renderToContext(
-                  ctx,
-                  timelineState.left,
-                  timelineState.right,
-                  top,
-                  bottom
-                ).then((s) => {
-                  if (
-                    initialRender &&
-                    startTimeOffset !== 0 &&
-                    endTimeOffset !== 1
-                  ) {
-                    // NOTE: If we're doing an initial render at a zoomed in portion, we need to make sure we create
-                    //  the full range image first.
-                    setInitialZoom(
-                      startTimeOffset,
-                      endTimeOffset,
-                      1,
-                      0,
-                      initialRender,
-                      true
-                    );
-                  }
+              }
+            }
+          }
+          const fileBytesReceived = new Uint8Array(receivedLength);
+          let position = 0;
+          for (const chunk of chunks) {
+            fileBytesReceived.set(chunk, position);
+            position += chunk.length;
+          }
+          fileBytes = fileBytesReceived.buffer;
+          const {
+            renderRange,
+            renderToContext,
+            audioFileUrl,
+            numAudioSamples,
+            invalidateCanvasCaches,
+            unloadAudio,
+            terminateWorkers,
+            cyclePalette,
+            persistentSpectrogramState,
+          } = await initSpectrogram(
+            fileBytes,
+            this.persistentSpectrogramState || null
+          );
+          timelineState.numAudioSamples = numAudioSamples;
+          timelineState.left = 0;
+          timelineState.top = 1;
+          timelineState.bottom = 0;
+          timelineState.right = 1;
+          timelineState.zoomX = 1;
+          timelineState.pinchStarted = false;
+          timelineState.panStarted = false;
+          timelineState.initialPinchXLeftZeroOne = 0;
+          timelineState.initialPinchXRightZeroOne = 1;
+          timelineState.currentAction = null;
+          if (audioState.playing) {
+            audioState.togglePlayback();
+          }
+          audioState.followPlayhead = false;
+          this.persistentSpectrogramState = persistentSpectrogramState;
+          this.terminateExistingState = unloadAudio;
+          this.terminateWorkers = terminateWorkers;
+          this.invalidateCanvasCaches = invalidateCanvasCaches;
+          this.renderRange = renderRange;
 
+          const defaultPalette = "Viridis";
+          // Select starting palette
+          let palette =
+            this.getAttribute("color-scheme") ||
+            this.getAttribute("colour-scheme") ||
+            defaultPalette;
+          if (
+            !colorMaps.map((p) => p.toLowerCase()).includes(palette.toLowerCase())
+          ) {
+            console.error(
+              `Unknown color scheme: ${palette}. Allowed schemes are any of '${colorMaps.join(
+                "', '"
+              )}'`
+            );
+            palette = defaultPalette;
+          }
+          let paletteChangeTimeout;
+          this.nextPalette = () => {
+            const nextPalette = cyclePalette();
+            // Give downstream renderers a moment to adjust to palette changes;
+            clearTimeout(paletteChangeTimeout);
+            paletteChangeTimeout = setTimeout(() => {
+              timelineState.isDarkTheme = nextPalette !== "Grayscale";
+              const startZeroOne = timelineState.left;
+              const endZeroOne = timelineState.right;
+              const top = timelineState.top;
+              const bottom = timelineState.bottom;
+              drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+              renderToContext(ctx, startZeroOne, endZeroOne, top, bottom);
+              renderToContext(mapCtx, 0, 1, 1, 0);
+              audioState.progressSampleTime = performance.now();
+              updatePlayhead();
+              if (this.actualSampleRate) {
+                redrawOverlay(timelineState, this.actualSampleRate);
+              }
+            }, 10);
+            return nextPalette;
+          };
+          while (this.nextPalette().toLowerCase() !== palette.toLowerCase()) {
+            // Cycle until we get the desired palette
+          }
+          this.transformY = (y) => {
+            const top = timelineState.top;
+            const bottom = timelineState.bottom;
+            // Is the incoming y within the clampedRangeY?
+            const maxYZoom =
+              (TEXTURE_HEIGHT / (canvas.height / window.devicePixelRatio)) *
+              MAX_ZOOMED_REGION;
+            const rangeY = top - bottom;
+            const minRangeY =
+              1 / (TEXTURE_HEIGHT / (canvas.height / window.devicePixelRatio));
+
+            // The input height of the selected region.
+            const clampedRangeY = Math.max(rangeY, minRangeY);
+            const posY = bottom / Math.max(0.000001, 1 - rangeY);
+            const rem = 1 - clampedRangeY;
+            const inBottom = rem * posY;
+            const inTop = inBottom + clampedRangeY;
+
+            const mMaxZoom = map(clampedRangeY, 1, minRangeY, 1, 1 / maxYZoom);
+            const actualHeight = clampedRangeY * (1 / mMaxZoom);
+            const remainder = 1 - actualHeight;
+            const selectedBottom = remainder * posY;
+            const selectedTop = selectedBottom + actualHeight;
+
+            const aboveRange = y > inTop;
+            const belowRange = y < inBottom;
+            const inRange = y <= inTop && y >= inBottom;
+            if (inRange) {
+              y = map(y, inBottom, inTop, selectedBottom, selectedTop);
+            } else if (belowRange) {
+              y = map(y, 0, inBottom, 0, selectedBottom);
+            } else if (aboveRange) {
+              y = map(y, inTop, 1.0, selectedTop, 1.0);
+            }
+            return y;
+          };
+          this.inverseTransformY = (yZeroOne) => {
+            // How much to crop of the top and bottom of the spectrogram (used if the sample rate of the audio was different
+            // from the sample rate the FFT was performed at, since that leaves a blank space at the top)
+            let y = 1 - Math.min(1, Math.max(0, yZeroOne));
+            const top = timelineState.top;
+            const bottom = timelineState.bottom;
+            const maxZoom =
+              1024 / (this.timelineElements.canvas.height / devicePixelRatio);
+            const maxYZoom = maxZoom * 0.8;
+            const minRangeY = 1.0 / maxZoom;
+            const rangeY = top - bottom;
+            const clampedRangeY = Math.max(rangeY, minRangeY);
+            // Prevent divide by zero
+            const posY = bottom / Math.max(0.000001, 1.0 - rangeY);
+            const mMaxZoom = map(
+              clampedRangeY,
+              1.0,
+              minRangeY,
+              1.0,
+              1.0 / maxYZoom
+            );
+            const actualHeight = clampedRangeY * (1.0 / mMaxZoom);
+            const remainder = 1.0 - actualHeight;
+            const selectedBottom = remainder * posY;
+            const selectedTop = selectedBottom + actualHeight;
+            const aboveRange = y > selectedTop;
+            const belowRange = y < selectedBottom;
+            const inRange = y <= selectedTop && y >= selectedBottom;
+
+            if (inRange) {
+              y = map(y, selectedBottom, selectedTop, bottom, top);
+            } else if (belowRange) {
+              y = map(y, 0.0, selectedBottom, 0.0, bottom);
+            } else if (aboveRange) {
+              y = map(y, selectedTop, 1.0, top, 1.0);
+            }
+            return y;
+          };
+          let cropAmountTop = 0;
+          this.render = ({ detail: { initialRender, force } }) => {
+            if (this.raf) {
+              cancelAnimationFrame(this.raf);
+              this.raf = undefined;
+            }
+            this.raf = requestAnimationFrame(() => {
+              const startZeroOne = timelineState.left;
+              const endZeroOne = timelineState.right;
+              const top = timelineState.top;
+              const bottom = timelineState.bottom;
+
+              if (this.deferredWidth && ctx.canvas.width !== this.deferredWidth) {
+                this.resizeCanvases(this.deferredWidth, true);
+                this.timelineElements.container.classList.remove("disabled");
+              }
+
+              drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+              if (!audioState.playing) {
+                audioState.progressSampleTime = performance.now();
+                updatePlayhead();
+              }
+
+              // Render the stretched version
+              renderToContext(ctx, startZeroOne, endZeroOne, top, bottom).then(
+                (s) => {
                   if (!!s) {
                     this.shadowRoot.dispatchEvent(
                       new CustomEvent("render", {
@@ -605,29 +556,113 @@ export default class Spectastiq extends HTMLElement {
                       })
                     );
                   }
-                });
+                }
+              );
+              if (initialRender) {
+                renderToContext(mapCtx, 0, 1, 1, 0);
               }
-            );
-          }
-        });
-      };
-      await initAudio(
-        this.playerElements,
-        audioFileUrl,
-        audioState,
-        numAudioSamples / 48000
-      );
-      // Initial render
-      this.render({ detail: { initialRender: true, force: true } });
-      // TODO: Animate to region of interest could be replaced by reactive setting of :start :end props?
-      this.resizeInited = true;
+
+              if (!this.sharedState.interacting || initialRender) {
+                // Render the fine detail of the zoom level and then fill it in when available.
+                renderRange(startZeroOne, endZeroOne, canvas.width, force).then(
+                  (rangeCropInfo) => {
+                    if (rangeCropInfo && rangeCropInfo.cropAmountTop) {
+                      cropAmountTop = rangeCropInfo.cropAmountTop;
+                      this.actualSampleRate = rangeCropInfo.actualSampleRate;
+                    }
+                    if (initialRender) {
+                      renderToContext(mapCtx, 0, 1, 1, 0).then(() => {
+                        if (
+                          this.loadingSpinner &&
+                          this.loadingSpinner.parentElement
+                        ) {
+                          this.loadingSpinner.parentElement.removeChild(
+                            this.loadingSpinner
+                          );
+                          this.playerElements.playButton.removeAttribute(
+                            "disabled"
+                          );
+                          this.shadowRoot.dispatchEvent(
+                            new CustomEvent("audio-loaded", {
+                              composed: true,
+                              bubbles: false,
+                              cancelable: false,
+                              detail: {
+                                sampleRate: this.actualSampleRate,
+                                duration: numAudioSamples / 48000,
+                              },
+                            })
+                          );
+                          this.endLoad();
+                        }
+                      });
+                    }
+                    renderToContext(
+                      ctx,
+                      timelineState.left,
+                      timelineState.right,
+                      top,
+                      bottom
+                    ).then((s) => {
+                      if (
+                        initialRender &&
+                        startTimeOffset !== 0 &&
+                        endTimeOffset !== 1
+                      ) {
+                        // NOTE: If we're doing an initial render at a zoomed in portion, we need to make sure we create
+                        //  the full range image first.
+                        setInitialZoom(
+                          startTimeOffset,
+                          endTimeOffset,
+                          1,
+                          0,
+                          initialRender,
+                          true
+                        );
+                      }
+
+                      if (!!s) {
+                        this.shadowRoot.dispatchEvent(
+                          new CustomEvent("render", {
+                            bubbles: false,
+                            composed: true,
+                            cancelable: false,
+                            detail: {
+                              range: {
+                                begin: startZeroOne,
+                                end: endZeroOne,
+                                min: bottom,
+                                max: top,
+                              },
+                              context: userOverlayCtx,
+                            },
+                          })
+                        );
+                      }
+                    });
+                  }
+                );
+              }
+            });
+          };
+          await initAudio(
+            this.playerElements,
+            audioFileUrl,
+            audioState,
+            numAudioSamples / 48000
+          );
+          // Initial render
+          this.render({ detail: { initialRender: true, force: true } });
+          // TODO: Animate to region of interest could be replaced by reactive setting of :start :end props?
+          this.resizeInited = true;
+        } catch (e) {
+          console.warn("aborted?", e);
+        }
+      }
     })();
   }
 
   beginLoad() {
-    if (!this.progressBar.parentElement) {
-      this.timelineElements.spectrogramContainer.appendChild(this.progressBar);
-    }
     if (!this.loadingSpinner.parentElement) {
       this.timelineElements.spectrogramContainer.appendChild(
         this.loadingSpinner
@@ -640,8 +675,8 @@ export default class Spectastiq extends HTMLElement {
     this.timelineElements.container.classList.remove("loading");
   }
 
-  init(loadedSrc) {
-    const src = this.getAttribute("src") || loadedSrc;
+  init() {
+    const src = this.getAttribute("src");
     const root = this.shadowRoot;
     if (!this.inited) {
       root.appendChild(template.content.cloneNode(true));
