@@ -847,7 +847,11 @@ export default class Spectastiq extends HTMLElement {
       redrawOverlay(timelineState, e.detail.sampleRate);
     });
     overlayCanvas.addEventListener("custom-region-change", (e) => {
-      const { left, right, top, bottom } = e.detail;
+      let { left, right, top, bottom } = e.detail;
+      left = Math.max(0, left);
+      right = Math.min(overlayCanvas.width * devicePixelRatio, right);
+      top = Math.max(0, top);
+      bottom = Math.min(overlayCanvas.height * devicePixelRatio, bottom);
       clearOverlay();
       redrawOverlay(timelineState, this.actualSampleRate);
       const ctx = overlayCanvas.getContext("2d");
@@ -863,19 +867,20 @@ export default class Spectastiq extends HTMLElement {
       const range = timelineState.right - timelineState.left;
       const startZeroOne =
         timelineState.left +
-        (left / (overlayCanvas.width / devicePixelRatio)) * range;
+        (Math.max(0, left / (overlayCanvas.width / devicePixelRatio))) * range;
       const endZeroOne =
         timelineState.left +
-        (right / (overlayCanvas.width / devicePixelRatio)) * range;
+        (Math.min(1, right / (overlayCanvas.width / devicePixelRatio))) * range;
+
+
       const start = startZeroOne * audioState.audioDuration;
       const end = endZeroOne * audioState.audioDuration;
-      const bottomZeroOne = bottom / (overlayCanvas.height / devicePixelRatio);
-      const topZeroOne = top / (overlayCanvas.height / devicePixelRatio);
+      const bottomZeroOne = Math.max(0, bottom / (overlayCanvas.height / devicePixelRatio));
+      const topZeroOne = Math.min(1, top / (overlayCanvas.height / devicePixelRatio));
       const minFreqHz =
         this.inverseTransformY(bottomZeroOne) * (this.actualSampleRate / 2);
       const maxFreqHz =
         this.inverseTransformY(topZeroOne) * (this.actualSampleRate / 2);
-
 
       this.shadowRoot.dispatchEvent(
         new CustomEvent("region-create", {
