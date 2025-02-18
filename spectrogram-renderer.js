@@ -67,6 +67,29 @@ export const initSpectrogram = async (fileBytes, previousState) => {
   }
   const actualFloatData = floatData.subarray(0, actualEnd);
 
+  if (false) {
+    // Normalise float data:
+    let min = Number.MAX_VALUE;
+    let max = 0;
+    for (let i = 0; i < actualFloatData.length; i++) {
+      const v = Math.abs(actualFloatData[i]);
+      if (v < min) {
+        min = v;
+      }
+      if (v > max) {
+        max = v;
+      }
+    }
+
+    // TODO: Maybe increase gain by the amount required to normalise the audio?
+    console.log("Float max", max);
+    // const range = max - min;
+    // for (let i = 0; i < actualFloatData.length; i++) {
+    //   actualFloatData[i] = (actualFloatData[i] - min) / range;
+    // }
+    console.log("Dynamic range", 1 / max);
+  }
+
   if (USE_SHARED_ARRAY_BUFFER && window.SharedArrayBuffer) {
     state.sharedFloatData = new Float32Array(
       new SharedArrayBuffer(actualFloatData.byteLength)
@@ -407,16 +430,15 @@ async function renderArrayBuffer(
 
   // FIXME - Only grab the maxes once, at startup? It's possible there are smaller sounds that aren't captured at that zoom
   //  level, and the max may need to be adjusted though.
-  const results = await Promise.all(job);
-  if (!state.max) {
-    state.max = Math.max(...results.map(({ max }) => max));
-  }
+  await Promise.all(job);
   if (state.firstRender) {
     // Work out the actual clipping
     state.firstRender = false;
     // NOTE: Try to find the actual sample rate of the audio if it's been resampled.
     const sliceLen = FFT_WIDTH / 2;
     const negs = [];
+
+    // Starting 100 pixels/slices into the audio
     for (
       let j = sliceLen * 100;
       j < state.sharedOutputData.length;
@@ -433,10 +455,36 @@ async function renderArrayBuffer(
     }
     negs.sort();
     const clip = Math.min(negs[Math.floor(negs.length / 2)], FFT_WIDTH / 2);
-    state.actualSampleRate = (((clip - 1) * 48000) / FFT_WIDTH) * 2;
-    state.cropAmountTop = 1 - clip / (FFT_WIDTH / 2);
+    const cClip = FFT_WIDTH / 2 - clip;
+    const clipPercent = 1 - (cClip / (FFT_WIDTH / 2));
+    state.actualSampleRate = 48000 * clipPercent;
+    state.cropAmountTop = 1 - clipPercent;
+
+    let min = Number.MAX_VALUE;
+    let max = 0;
+    for (
+      let j = 0;
+      j < state.sharedOutputData.length;
+      j += sliceLen
+    ) {
+      const slice = state.sharedOutputData.slice(j, j + sliceLen);
+      for (let i = 0; i < clip; i++) {
+        const val = slice[i];
+        min = Math.min(min, val);
+        max = Math.max(max, val);
+      }
+    }
+    state.min = min;
+    state.max = max;
+    // Maybe we need to calculate the min/maxes here after cropping anyway?
+    // We remove values at the top of the clip less than 10,000
+    // console.log("Dynamic range", state.min, state.max);
     // TODO: Crop off noise floor?
   }
+
+  // TODO: Once we know how we're cropping etc, work out min/max values and translate that to a volume scale.
+  //  Also allow doing this *again* for a zoomed region of interest.
+
   // noinspection JSSuspiciousNameCombination
   const nextImageData = {
     startZeroOne,

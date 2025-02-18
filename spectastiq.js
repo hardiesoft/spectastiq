@@ -1,6 +1,7 @@
 import { initTimeline } from "./timeline-wrapper.js";
 import { initSpectrogram, colorMaps } from "./spectrogram-renderer.js";
 import { initAudio, initAudioPlayer } from "./audio-player.js";
+import {mapRange} from "./webgl-drawimage.js";
 
 const template = document.createElement("template");
 template.innerHTML = `
@@ -70,6 +71,13 @@ template.innerHTML = `
     padding: 0;
     touch-action: none;
     user-select: none;           
+  }
+  #spectastiq-timescale-overlay-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    touch-action: none;
+    user-select: none;
   }  
   #main-playhead-canvas, #user-overlay-canvas, #spectrogram-canvas {
     margin: 0;
@@ -198,9 +206,10 @@ template.innerHTML = `
 <div id="container">
   <div id="spectrogram-container">
     <div id="canvas-container">
-      <canvas height="300" id="spectrogram-canvas"></canvas>        
-      <canvas height="300" id="spectastiq-overlay-canvas"></canvas>
+      <canvas height="300" id="spectrogram-canvas"></canvas>
       <canvas height="300" id="user-overlay-canvas"></canvas>
+      <canvas height="30" id="spectastiq-timescale-overlay-canvas"></canvas>        
+      <canvas height="300" id="spectastiq-overlay-canvas"></canvas>
       <canvas height="300" id="main-playhead-canvas"></canvas>                
     </div>
     <div id="mini-map">
@@ -239,12 +248,65 @@ export default class Spectastiq extends HTMLElement {
   inited = false;
   sharedState = { interacting: false };
 
-  static observedAttributes = ["src"];
+  static observedAttributes = ["src", "height", "time-scale", "frequency-scale", "color-scheme", "colour-scheme"];
 
   attributeChangedCallback(name, oldValue, newValue) {
     if (this.inited) {
-      this.loadSrc(newValue);
+      switch (name) {
+        case "src": {
+          newValue && this.loadSrc(newValue);
+        }
+          break;
+        case "height": {
+          const totalHeight = Number(newValue) || 360;
+          this.timelineHeight = Math.min(60, Math.max(44, totalHeight - 200));
+          this.spectrogramHeight = totalHeight - this.timelineHeight;
+          // Resize.
+          this.resizeCanvases(undefined, false);
+        }
+          break;
+        case "time-scale": {
+          this.drawTimescale = this.timeScale;
+          if (this.drawTimescale) {
+            this.redrawTimescaleOverlay();
+          } else {
+            this.clearTimescaleOverlay();
+          }
+        }
+          break;
+        case "frequency-scale": {
+          this.drawFrequencyScale = this.frequencyScale;
+          if (this.drawFrequencyScale) {
+            this.redrawFrequencyScaleOverlay();
+          } else {
+            this.clearOverlay();
+          }
+          if (this.drawTimescale) {
+            this.redrawTimescaleOverlay();
+          }
+        }
+          break;
+        case "color-scheme":
+        case "colour-scheme": {
+          if (!colorMaps.map((p) => p.toLowerCase()).includes(newValue.toLowerCase())) {
+            console.error(
+              `Unknown color scheme: ${newValue}. Allowed schemes are any of '${colorMaps.join(
+                "', '"
+              )}'`
+            );
+            return;
+          }
+          while (this.nextPalette().toLowerCase() !== this.colorScheme.toLowerCase()) {
+            // Cycle until we get the desired palette
+          }
+        }
+          break;
+      }
     }
+  }
+
+  listColorSchemes() {
+    return colorMaps;
   }
 
   connectedCallback() {
@@ -261,6 +323,46 @@ export default class Spectastiq extends HTMLElement {
   }
   set src(newValue) {
     this.setAttribute("src", newValue);
+  }
+
+  get height() {
+    return this.getAttribute("height");
+  }
+  set height(newValue) {
+    this.setAttribute("height", newValue);
+  }
+
+  get timeScale() {
+    if (this.hasAttribute("time-scale")) {
+      const scale = this.getAttribute("time-scale");
+      return scale !== "false" && scale !== "0" && scale !== null;
+    }
+    return false;
+  }
+  set timeScale(newValue) {
+    this.setAttribute("time-scale", newValue);
+  }
+
+  get frequencyScale() {
+    if (this.hasAttribute("frequency-scale")) {
+      const scale = this.getAttribute("frequency-scale");
+      return scale !== "false" && scale !== "0" && scale !== null;
+    }
+    return false;
+  }
+  set frequencyScale(newValue) {
+    this.setAttribute("frequency-scale", newValue);
+  }
+  get colorScheme() {
+    return this.getAttribute("color-scheme") || this.getAttribute("colour-scheme");
+  }
+  set colorScheme(newValue) {
+    // TODO: Make sure it's an allowed colour scheme, otherwise throw a warning.
+    this.setAttribute("color-scheme", newValue);
+  }
+  set colourScheme(newValue) {
+    // TODO: Make sure it's an allowed colour scheme, otherwise throw a warning.
+    this.setAttribute("color-scheme", newValue);
   }
 
   unload() {
@@ -281,12 +383,13 @@ export default class Spectastiq extends HTMLElement {
         console.error(`Malformed JSON passed for request headers: ${e}`);
       }
     }
-    const { drawTimelineUI, redrawOverlay, timelineState, setInitialZoom } =
+    const { drawTimelineUI, timelineState, setInitialZoom } =
       this.timeline;
     const { audioState, updatePlayhead } = this.audioPlayer;
     const canvas = this.timelineElements.canvas;
     const mapCtx = this.timelineElements.mapCanvas.getContext("webgl2");
     const ctx = canvas.getContext("webgl2");
+    const timescaleOverlayContext = this.timelineElements.timescaleCanvas.getContext("2d");
     const userOverlayCtx =
       this.timelineElements.userOverlayCanvas.getContext("2d");
     this.progressBar.setAttribute("value", String(0));
@@ -388,7 +491,7 @@ export default class Spectastiq extends HTMLElement {
           timelineState.initialPinchXRightZeroOne = 1;
           timelineState.currentAction = null;
           if (audioState.playing) {
-            audioState.togglePlayback();
+            await audioState.pause(0);
           }
           audioState.followPlayhead = false;
           this.persistentSpectrogramState = persistentSpectrogramState;
@@ -400,8 +503,7 @@ export default class Spectastiq extends HTMLElement {
           const defaultPalette = "Viridis";
           // Select starting palette
           let palette =
-            this.getAttribute("color-scheme") ||
-            this.getAttribute("colour-scheme") ||
+            this.colorScheme ||
             defaultPalette;
           if (
             !colorMaps.map((p) => p.toLowerCase()).includes(palette.toLowerCase())
@@ -415,6 +517,7 @@ export default class Spectastiq extends HTMLElement {
           }
           let paletteChangeTimeout;
           this.nextPalette = () => {
+            this.clearOverlay();
             const nextPalette = cyclePalette();
             // Give downstream renderers a moment to adjust to palette changes;
             clearTimeout(paletteChangeTimeout);
@@ -430,7 +533,11 @@ export default class Spectastiq extends HTMLElement {
               audioState.progressSampleTime = performance.now();
               updatePlayhead();
               if (this.actualSampleRate) {
-                redrawOverlay(timelineState, this.actualSampleRate);
+                if (this.drawFrequencyScale) {
+                  this.redrawFrequencyScaleOverlay();
+                } else {
+                  this.clearOverlay();
+                }
               }
             }, 10);
             return nextPalette;
@@ -513,6 +620,84 @@ export default class Spectastiq extends HTMLElement {
             return y;
           };
           let cropAmountTop = 0;
+          const clampZeroOne = (x) => Math.max(0, Math.min(1, x));
+          const redrawTimescaleOverlay = (ctx, startZeroOne, endZeroOne, duration) => {
+            ctx.save();
+            // Draw a notch every ~second
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            const startTime = startZeroOne * duration;
+            const endTime = endZeroOne * duration;
+            const startSeconds = Math.floor(startTime);
+            const endSeconds = Math.ceil(endTime);
+            const zoomLevel = endZeroOne - startZeroOne;
+
+            //const distanceBetweenSecondNotches = (startZeroOne + 1) / duration * ctx.canvas.width / devicePixelRatio;
+
+            // TODO: Fade between.  I guess we want a good way of generalising this pattern of having features fade in at
+            //  various zoom levels.  Maybe show every 10 seconds, then every 5, then every 2, then every 1
+
+            //console.log("distanceBetweenSecondNotches", distanceBetweenSecondNotches, drawEveryOtherSecond);
+            const tenPx = 10 * devicePixelRatio;
+            ctx.font = `${tenPx}px sans-serif`;
+            ctx.textAlign = "center";
+            let xOpacity = 0.5;
+            let pX = 0;
+            for (let i = startSeconds; i < endSeconds; i += 1) {
+              const oX = mapRange(i / duration, startZeroOne, endZeroOne, 0, 1) * ctx.canvas.width;
+              const distanceBetweenSecondNotches = oX - pX;
+              pX = oX;
+              if (i !== 0) {
+                if (this.drawFrequencyScale) {
+                  xOpacity = Math.min(0.5, clampZeroOne(mapRange(oX, ctx.canvas.width - tenPx * 10, ctx.canvas.width, 0.5, 0)));
+                }
+                ctx.fillStyle = `rgba(255, 255, 255, ${xOpacity})`;
+                ctx.fillRect(oX, 0, 1, ctx.canvas.height / 2);
+                const minDistanceBetweenSecondNotches = 15 * devicePixelRatio;
+                // TODO: Generalise this
+
+                // Don't draw labels too close together.
+                const isOdd = i % 2 === 1;
+                if (!isOdd) {
+                    const distance = Math.min(30 * devicePixelRatio, distanceBetweenSecondNotches);
+                    const opacity = clampZeroOne(mapRange(distance, 15 * devicePixelRatio, 30 * devicePixelRatio, 0, 1));
+                    ctx.fillStyle = `rgba(255, 255, 255, ${xOpacity * opacity})`;
+                }
+                // TODO: For clips longer than a minute, should have 1m35s notation?
+                if (oX + tenPx < ctx.canvas.width) {
+                  ctx.fillText(`${i}s`, oX, ctx.canvas.height / 2 + tenPx);
+                }
+              }
+              // TODO: Spacing and zoom level of elements should also be proportionate to how close together they are
+              //  because of audio duration.
+              const opacity = clampZeroOne(mapRange(1 - zoomLevel, 0.25, 1, 0, 1));
+              if (opacity > 0) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${opacity * xOpacity})`;
+                for (let j = 1; j < 10; j += 1) {
+                  const oX = mapRange((i + (0.1 * j)) / duration, startZeroOne, endZeroOne, 0, 1) * ctx.canvas.width;
+                  let h = ctx.canvas.height / 3;
+                  if (j === 5) {
+                    h += 5 * devicePixelRatio;
+                  }
+                  ctx.fillRect(oX, 0, 1, h);
+                }
+              }
+            }
+
+            // for (let i = startSeconds; i < endSeconds; i += 1) {
+            //   const offsetX = ((i / duration)) * ctx.canvas.width;
+            //   console.log(i, offsetX);
+            //   ctx.fillRect(offsetX, 0, 1, ctx.canvas.height);
+            //
+            // }
+
+            ctx.restore();
+          };
+          this.redrawTimescaleOverlay = () => redrawTimescaleOverlay(timescaleOverlayContext, timelineState.left, timelineState.right, audioState.audioDuration);
+          this.clearTimescaleOverlay = () => {
+            timescaleOverlayContext.save();
+            timescaleOverlayContext.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+          }
+
           this.render = ({ detail: { initialRender, force } }) => {
             if (this.raf) {
               cancelAnimationFrame(this.raf);
@@ -523,9 +708,10 @@ export default class Spectastiq extends HTMLElement {
               const endZeroOne = timelineState.right;
               const top = timelineState.top;
               const bottom = timelineState.bottom;
-
-              if (this.deferredWidth && ctx.canvas.width !== this.deferredWidth) {
+              if (this.deferredWidth && ctx.canvas.width !== this.deferredWidth || this.deferredHeight && ctx.canvas.height !== this.deferredHeight) {
                 this.resizeCanvases(this.deferredWidth, true);
+                this.timelineElements.container.classList.remove("disabled");
+              } else if (this.deferredWidth && ctx.canvas.width === this.deferredWidth && this.deferredHeight && ctx.canvas.height === this.deferredHeight) {
                 this.timelineElements.container.classList.remove("disabled");
               }
 
@@ -533,6 +719,13 @@ export default class Spectastiq extends HTMLElement {
               if (!audioState.playing) {
                 audioState.progressSampleTime = performance.now();
                 updatePlayhead();
+              }
+
+              // TODO: Move somewhere sensible
+              this.drawTimescale = this.timeScale;
+              this.drawFrequencyScale = this.frequencyScale;
+              if (this.drawTimescale) {
+                redrawTimescaleOverlay(timescaleOverlayContext, startZeroOne, endZeroOne, audioState.audioDuration);
               }
 
               // Render the stretched version
@@ -676,6 +869,15 @@ export default class Spectastiq extends HTMLElement {
   }
 
   init() {
+
+    // TODO: Maybe pass in min/max frequency bounds, so that the view is restricted to AOI?
+    // TODO: Get height dynamically from attributes, and respond to changes in height.
+
+    const totalHeight = this.height || 360;
+    this.timelineHeight = Math.min(60, Math.max(44, totalHeight - 200));
+    this.spectrogramHeight = totalHeight - this.timelineHeight;
+
+
     const src = this.getAttribute("src");
     const root = this.shadowRoot;
     if (!this.inited) {
@@ -688,9 +890,12 @@ export default class Spectastiq extends HTMLElement {
 
     const container = root.getElementById("container");
     const spectrogramContainer = root.getElementById("spectrogram-container");
+    const canvasContainer = root.getElementById("canvas-container");
+    const miniMapContainer = root.getElementById("mini-map");
     const mapCanvas = root.getElementById("map-canvas");
     const canvas = root.getElementById("spectrogram-canvas");
     const overlayCanvas = root.getElementById("spectastiq-overlay-canvas");
+    const timescaleCanvas = root.getElementById("spectastiq-timescale-overlay-canvas");
     const userOverlayCanvas = root.getElementById("user-overlay-canvas");
     const playheadCanvas = root.getElementById("playhead-canvas");
     const timelineUICanvas = root.getElementById("timeline-ui-canvas");
@@ -709,8 +914,11 @@ export default class Spectastiq extends HTMLElement {
     this.timelineElements = {
       mapCanvas,
       canvas,
+      canvasContainer,
+      miniMapContainer,
       userOverlayCanvas,
       overlayCanvas,
+      timescaleCanvas,
       timelineUICanvas,
       mainPlayheadCanvas,
       container,
@@ -729,6 +937,7 @@ export default class Spectastiq extends HTMLElement {
     };
     const resizeCanvas = (canvas, width, height, forReal = true) => {
       canvas.style.height = `${height}px`;
+      canvas.style.width = `${width}px`;
       // NOTE: Defer resizing the backing canvas until we actually want to draw to it, this makes resizes look better.
       if (!this.resizeInited || forReal) {
         canvas.height = height * devicePixelRatio;
@@ -737,17 +946,21 @@ export default class Spectastiq extends HTMLElement {
         this.deferredWidth = width;
         this.deferredHeight = height;
       }
-      canvas.style.width = `${width}px`;
     };
     overlayCanvas.addEventListener("interaction-begin", () => {
       this.sharedState.interacting = true;
       const startZeroOne = timelineState.left;
       const endZeroOne = timelineState.right;
       // TODO: Await requestAnimationFrame?
-
       // TODO: Set timeout in case we're interacting but not moving?
-
       drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+    });
+    overlayCanvas.addEventListener("interaction-target-changed", () => {
+      // Canvas-based hit areas changed, so redraw handles for hover states etc.
+      const startZeroOne = timelineState.left;
+      const endZeroOne = timelineState.right;
+      drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+      updatePlayhead();
     });
     overlayCanvas.addEventListener("interaction-end", () => {
       this.sharedState.interacting = false;
@@ -764,67 +977,79 @@ export default class Spectastiq extends HTMLElement {
         overlayCtx.canvas.height
       );
     };
+    this.clearOverlay = clearOverlay;
 
-    const redrawOverlay = (state, actualSampleRate) => {
-      if (isNaN(actualSampleRate)) {
-        debugger;
-      }
-      const overlayCtx = overlayCanvas.getContext("2d");
-      overlayCtx.save();
+    const redrawFrequencyScaleOverlay = (state, actualSampleRate) => {
+      const ctx = overlayCanvas.getContext("2d");
+      ctx.save();
       const isDarkTheme = state.isDarkTheme;
       state.textMeasurementCache = state.textMeasurementCache || {};
       const maxFreq = actualSampleRate / 2;
       const pixelRatio = window.devicePixelRatio;
-      overlayCtx.font = `${10 * pixelRatio}px sans-serif`;
-      let prevY = -100;
+      ctx.font = `${10 * pixelRatio}px sans-serif`;
       const divisions = Math.ceil(maxFreq / 1000) + 1;
       const divisionColor = isDarkTheme
         ? "rgba(255, 255, 255, 0.1)"
         : "rgba(0, 0, 0, 0.1)";
       const textColor = isDarkTheme
-        ? "rgba(255, 255, 255, 0.85)"
+        ? "rgba(255, 255, 255, 0.5)"
         : "rgba(0, 0, 0, 0.85)";
-      for (let i = 0; i <= divisions; i++) {
-        overlayCtx.beginPath();
-        overlayCtx.strokeStyle = divisionColor;
-        overlayCtx.lineWidth = 1;
+      //start at bottom?
+      ctx.strokeStyle = divisionColor;
+      ctx.lineWidth = 1;
+      ctx.textAlign = "right";
+      ctx.textBaseline = "bottom";
+      ctx.fillStyle = textColor;
+      const label = "kHz";
+      const labelX = ctx.canvas.width - 4 * devicePixelRatio;
+      const kHzLabelY = ctx.canvas.height - 4 * devicePixelRatio;
+      ctx.fillText(
+        label,
+        labelX,
+        kHzLabelY
+      );
+      const cacheKey = `${label}_${pixelRatio}`;
+      const textHeight =
+        state.textMeasurementCache[cacheKey] ||
+        ctx.measureText(label).actualBoundingBoxAscent;
+      state.textMeasurementCache[cacheKey] = textHeight;
+
+      let prevY = (kHzLabelY - (textHeight * 0.5)) / pixelRatio;
+      const minYOffsetFromMargin = Math.abs(prevY - ctx.canvas.height / pixelRatio);
+      for (let i = divisions; i >= 0; i--) {
         const yy = i / divisions;
         const yyy = this.transformY(1 - yy);
-        let y = ((1 - yyy) * overlayCtx.canvas.height) / pixelRatio;
-        if (y - prevY > 15) {
-          overlayCtx.strokeRect(0, y * pixelRatio, overlayCtx.canvas.width, 0);
-          overlayCtx.fillStyle = textColor;
-          overlayCtx.textAlign = "right";
-          overlayCtx.textBaseline = "middle";
+        let y = ((1 - yyy) * ctx.canvas.height) / pixelRatio;
+        if (prevY - y > 15) {
+          ctx.strokeRect(0, y * pixelRatio, ctx.canvas.width - 25 * pixelRatio, 0);
+          ctx.textBaseline = "middle";
           const thisFrequency = Math.round((1 - yy) * maxFreq) / 1000;
-          const label = `${thisFrequency.toFixed(1).toLocaleString()} kHz`;
+          const label = `${thisFrequency.toFixed(1).toLocaleString()}`;
           // NOTE: Measure text takes a fair bit on time on chrome on lower powered android devices; cache measurements.
           const cacheKey = `${label}_${pixelRatio}`;
           const textHeight =
             state.textMeasurementCache[cacheKey] ||
-            overlayCtx.measureText(label).actualBoundingBoxAscent;
+            ctx.measureText(label).actualBoundingBoxAscent;
           state.textMeasurementCache[cacheKey] = textHeight;
-          const overshootTop = y - (textHeight + 5 * pixelRatio) * 0.5;
           const overshootBottom = y + (textHeight + 5 * pixelRatio) * 0.5;
-          const overshotTop = overshootTop <= 0;
           const overshotBottom =
-            overshootBottom >= overlayCtx.canvas.height / pixelRatio;
+            overshootBottom >= ctx.canvas.height / pixelRatio;
           if (overshotBottom) {
-            overlayCtx.textBaseline = "bottom";
-          } else if (overshotTop) {
-            overlayCtx.textBaseline = "top";
-            y += 2 * pixelRatio;
+            ctx.textBaseline = "bottom";
+            y -= 2 * pixelRatio;
           }
           // NOTE: fillText is also slow on low-end devices, consider caching text and blitting.
-          overlayCtx.fillText(
-            label,
-            overlayCtx.canvas.width - 4,
-            y * pixelRatio
-          );
-          prevY = y;
+          if (y * pixelRatio > 0) {
+            ctx.fillText(
+              label,
+              ctx.canvas.width - 4 * pixelRatio,
+              Math.max(minYOffsetFromMargin * pixelRatio, y * pixelRatio)
+            );
+            prevY = y;
+          }
         }
       }
-      overlayCtx.restore();
+      ctx.restore();
     };
 
     overlayCanvas.addEventListener("range-change", (e) => {
@@ -838,13 +1063,13 @@ export default class Spectastiq extends HTMLElement {
       prevMax = e.detail.range.max;
       prevMin = e.detail.range.min;
       if (yRangeChanged) {
-        clearOverlay();
-        redrawOverlay(timelineState, this.actualSampleRate);
+        this.drawFrequencyScale && clearOverlay();
+        this.drawFrequencyScale && redrawFrequencyScaleOverlay(timelineState, this.actualSampleRate);
       }
     });
     this.shadowRoot.addEventListener("audio-loaded", (e) => {
-      clearOverlay();
-      redrawOverlay(timelineState, e.detail.sampleRate);
+      this.drawFrequencyScale && clearOverlay();
+      this.drawFrequencyScale && redrawFrequencyScaleOverlay(timelineState, e.detail.sampleRate);
     });
     overlayCanvas.addEventListener("custom-region-change", (e) => {
       let { left, right, top, bottom } = e.detail;
@@ -853,7 +1078,7 @@ export default class Spectastiq extends HTMLElement {
       top = Math.max(0, top);
       bottom = Math.min(overlayCanvas.height * devicePixelRatio, bottom);
       clearOverlay();
-      redrawOverlay(timelineState, this.actualSampleRate);
+      this.drawFrequencyScale && redrawFrequencyScaleOverlay(timelineState, this.actualSampleRate);
       const ctx = overlayCanvas.getContext("2d");
       ctx.setLineDash([5 * devicePixelRatio, 5 * devicePixelRatio]);
       ctx.lineWidth = 1 * devicePixelRatio;
@@ -862,7 +1087,7 @@ export default class Spectastiq extends HTMLElement {
     });
     overlayCanvas.addEventListener("custom-region-create", (e) => {
       clearOverlay();
-      redrawOverlay(timelineState, this.actualSampleRate);
+      this.drawFrequencyScale && redrawFrequencyScaleOverlay(timelineState, this.actualSampleRate);
       const { left, right, top, bottom } = e.detail;
       const range = timelineState.right - timelineState.left;
       const startZeroOne =
@@ -871,7 +1096,6 @@ export default class Spectastiq extends HTMLElement {
       const endZeroOne =
         timelineState.left +
         (Math.min(1, right / (overlayCanvas.width / devicePixelRatio))) * range;
-
 
       const start = startZeroOne * audioState.audioDuration;
       const end = endZeroOne * audioState.audioDuration;
@@ -896,6 +1120,9 @@ export default class Spectastiq extends HTMLElement {
         })
       );
     });
+    overlayCanvas.addEventListener("double-click", async (e) => {
+      await play(e.detail.audioOffsetZeroOne);
+    });
 
     const timeline = initTimeline(
       this.shadowRoot,
@@ -913,7 +1140,7 @@ export default class Spectastiq extends HTMLElement {
     } = timeline;
     this.timeline = {
       drawTimelineUI,
-      redrawOverlay,
+      redrawFrequencyScaleOverlay,
       timelineState,
       setInitialZoom,
       animateToRange,
@@ -940,6 +1167,8 @@ export default class Spectastiq extends HTMLElement {
       dragGlobalPlayhead,
       removeBandPass,
       togglePlayback,
+      play,
+      pause
     } = player;
 
     // TODO: Probably move audio progress to sharedState
@@ -958,7 +1187,8 @@ export default class Spectastiq extends HTMLElement {
       endPlayheadDrag,
     };
 
-    this.togglePlayback = togglePlayback;
+    this.play = play;
+    this.pause = pause;
     this.setGain = setGain;
 
     this.animateToRegionOfInterest = async (start, end, min, max) => {
@@ -992,7 +1222,9 @@ export default class Spectastiq extends HTMLElement {
         const playbackStart = start;
         const centerX = start + (end - start) * 0.5;
         // Pad region out by an additional 5%.
-        setPlaybackOffset(playbackStart);
+        // if (setPlaybackTimeToStartOfRegion) {
+        //   await setPlaybackOffset(playbackStart);
+        // }
         const maxXZoom = getMaxXZoom();
         const pRange = (end - start) * 1.1;
         const paddedRange = Math.max(1 / maxXZoom, pRange);
@@ -1035,6 +1267,7 @@ export default class Spectastiq extends HTMLElement {
       );
     };
     this.resetYZoom = resetYZoom;
+    this.redrawFrequencyScaleOverlay = () => redrawFrequencyScaleOverlay(timelineState, this.actualSampleRate);
 
     this.enterRegionCreationMode = () => {
       timelineState.regionCreationMode = true;
@@ -1051,20 +1284,31 @@ export default class Spectastiq extends HTMLElement {
 
     this.resizeCanvases = (resizedWidth, forReal) => {
       const width = resizedWidth || container.getBoundingClientRect().width;
-      resizeCanvas(this.timelineElements.canvas, width, 300, forReal);
-      resizeCanvas(this.timelineElements.overlayCanvas, width, 300, true);
+      this.timelineElements.canvasContainer.style.height = `${this.spectrogramHeight}px`;
+      this.timelineElements.miniMapContainer.style.height = `${this.timelineHeight}px`;
+      const initialWidth = this.timelineElements.canvas.width;
+      resizeCanvas(this.timelineElements.canvas, width, this.spectrogramHeight, forReal);
+      resizeCanvas(this.timelineElements.timescaleCanvas, width, Math.max(20, Math.min(30, this.spectrogramHeight / 10)), true);
+      resizeCanvas(this.timelineElements.overlayCanvas, width, this.spectrogramHeight, true);
       resizeCanvas(
         this.timelineElements.userOverlayCanvas,
         width,
-        300,
+        this.spectrogramHeight,
         true
       );
 
-      resizeCanvas(this.timelineElements.mapCanvas, width, 60, forReal);
-      resizeCanvas(this.timelineElements.timelineUICanvas, width, 60, true);
+      resizeCanvas(this.timelineElements.mapCanvas, width, this.timelineHeight, forReal);
+      resizeCanvas(this.timelineElements.timelineUICanvas, width, this.timelineHeight, true);
 
-      resizeCanvas(this.playerElements.mainPlayheadCanvas, width, 300, true);
-      resizeCanvas(this.playerElements.playheadCanvas, width, 60, true);
+      resizeCanvas(this.playerElements.mainPlayheadCanvas, width, this.spectrogramHeight, true);
+      resizeCanvas(this.playerElements.playheadCanvas, width, this.timelineHeight, true);
+      let didChangeWidth = false;
+      const willChangeWidth = width * devicePixelRatio !== this.timelineElements.canvas.width;
+      if (forReal) {
+        didChangeWidth = (this.deferredWidth && this.timelineElements.canvas.width === this.deferredWidth * devicePixelRatio) && this.deferredWidth !== initialWidth;
+        this.deferredWidth = undefined;
+        this.deferredHeight = undefined;
+      }
 
       const wasTriggeredByResizeEvent = !!resizedWidth;
       if (wasTriggeredByResizeEvent && !!this.resizeInited) {
@@ -1073,7 +1317,8 @@ export default class Spectastiq extends HTMLElement {
           const endZeroOne = timelineState.right;
           drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
           if (this.actualSampleRate) {
-            redrawOverlay(timelineState, this.actualSampleRate);
+            this.drawFrequencyScale && clearOverlay();
+            this.drawFrequencyScale && redrawFrequencyScaleOverlay(timelineState, this.actualSampleRate);
           }
           if (!audioState.playing) {
             audioState.progressSampleTime = performance.now();
@@ -1081,14 +1326,18 @@ export default class Spectastiq extends HTMLElement {
           }
         }
         this.sharedState.interacting = true;
-        this.timelineElements.container.classList.add("disabled");
         clearTimeout(this.sharedState.interactionTimeout);
+        this.timelineElements.container.classList.add("disabled");
         this.sharedState.interactionTimeout = setTimeout(() => {
-          this.invalidateCanvasCaches && this.invalidateCanvasCaches();
-          this.renderRange &&
+          if (didChangeWidth) {
+            this.invalidateCanvasCaches && this.invalidateCanvasCaches();
+            this.renderRange &&
             this.renderRange(0, 1, canvas.width, true).then(() => {
-              this.render({ detail: { initialRender: true, force: true } });
+              this.render({detail: {initialRender: true, force: true}});
             });
+          } else {
+            this.render({detail: {initialRender: true, force: true}});
+          }
           this.sharedState.interacting = false;
         }, 300);
       }
@@ -1108,6 +1357,9 @@ export default class Spectastiq extends HTMLElement {
         cancelable: false,
       })
     );
+
+    // TODO: Only if we're in the visible viewport, otherwise defer this
+
     // Initial attributeChangedCallback happens before connectedCallback, so need to load src after initial one-time setup.
     if (src && src !== "null" && src !== "undefined") {
       // NOTE: Vue initially passes `null` or `undefined` to src, which gets stringified.

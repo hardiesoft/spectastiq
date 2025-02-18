@@ -137,21 +137,18 @@ export class FftContext {
         return FftContext.__wrap(ret);
     }
     /**
-     * @param {Float32Array} max_output
      * @param {Float32Array} prelude
      * @param {Float32Array} data
      * @param {Float32Array} output
      */
-    processAudio(max_output, prelude, data, output) {
-        var ptr0 = passArrayF32ToWasm0(max_output, wasm.__wbindgen_malloc);
-        var len0 = WASM_VECTOR_LEN;
-        const ptr1 = passArrayF32ToWasm0(prelude, wasm.__wbindgen_malloc);
+    processAudio(prelude, data, output) {
+        const ptr0 = passArrayF32ToWasm0(prelude, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArrayF32ToWasm0(data, wasm.__wbindgen_malloc);
         const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passArrayF32ToWasm0(data, wasm.__wbindgen_malloc);
-        const len2 = WASM_VECTOR_LEN;
-        var ptr3 = passArrayF32ToWasm0(output, wasm.__wbindgen_malloc);
-        var len3 = WASM_VECTOR_LEN;
-        wasm.fftcontext_processAudio(this.__wbg_ptr, ptr0, len0, max_output, ptr1, len1, ptr2, len2, ptr3, len3, output);
+        var ptr2 = passArrayF32ToWasm0(output, wasm.__wbindgen_malloc);
+        var len2 = WASM_VECTOR_LEN;
+        wasm.fftcontext_processAudio(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, output);
     }
 }
 

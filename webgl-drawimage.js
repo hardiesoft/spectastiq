@@ -99,7 +99,7 @@ void main() {
     vec4 c = texture(u_texture, vec3(texcoord.x, texcoord.y, u_spectrogram_index));
     float e = INV_LOG_10 * log(c.r);
     float energyNormalised = e * u_scale;
-    float norm = energyNormalised * energyNormalised * energyNormalised * energyNormalised;// * energyNormalised;
+    float norm = energyNormalised * energyNormalised * energyNormalised * energyNormalised * energyNormalised;
     
     // TODO: Mel scale?
     vec3 colorMapVal = texture(u_colormap, vec3(norm, 0.5, u_colormap_index)).rgb;

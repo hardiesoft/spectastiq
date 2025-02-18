@@ -1,3 +1,5 @@
+import {mapRange} from "./webgl-drawimage.js";
+
 export const initAudioPlayer = (
   root,
   sharedState,
@@ -21,6 +23,7 @@ export const initAudioPlayer = (
   const state = {
     audioContext,
     audioProgressZeroOne: 0,
+    playbackStartOffset: 0,
     progressSampleTime: 0,
     playing: false,
     audioStatusPoll: 0,
@@ -38,22 +41,11 @@ export const initAudioPlayer = (
     root,
   };
 
-  playerElements.playButton.addEventListener("click", () =>
-    togglePlayback(state, timelineState, sharedState, playerElements)
-  );
-  playerElements.audio.addEventListener("timeupdate", () => {
-    state.audioProgressZeroOne =
-      playerElements.audio.currentTime / state.audioDuration;
-    state.progressSampleTime = performance.now();
-    if (state.audioProgressZeroOne >= 1) {
-      state.audioProgressZeroOne = 1;
-      state.playing = false;
-      pauseAudio(state, playerElements);
-    }
+  playerElements.playButton.addEventListener("click", async () => {
+    await togglePlayback(state, timelineState, sharedState, playerElements);
   });
   playerElements.audio.addEventListener("ended", () => {
-    state.playing = false;
-    pauseAudio(state, playerElements);
+    pauseAudio(state, timelineState, sharedState, playerElements, 1);
   });
   playerElements.audio.addEventListener("progress", () => {
     if (!state.resolved) {
@@ -61,6 +53,12 @@ export const initAudioPlayer = (
       state.resolver();
     }
   });
+  playerElements.audio.addEventListener("timeupdate", () => {
+    const currentTimeZeroOne = playerElements.audio.currentTime / state.audioDuration;
+    if (currentTimeZeroOne >= 1) {
+      pauseAudio(state, timelineState, sharedState, playerElements, 1);
+    }
+  })
   playerElements.audio.addEventListener("canplaythrough", () => {
     if (!state.resolved) {
       state.resolved = true;
@@ -70,15 +68,14 @@ export const initAudioPlayer = (
 
   return {
     audioState: state,
-    updatePlayhead: (beganPlaying = false, rangeChange = false, forced = false) =>
+    updatePlayhead: (beganPlaying = false, rangeChange = false, ) =>
       updatePlayhead(
         state,
         timelineState,
         sharedState,
         playerElements,
         beganPlaying,
-        rangeChange,
-        forced
+        rangeChange
       ),
     setPlaybackOffset: (offsetZeroOne) =>
       setPlaybackTime(offsetZeroOne, state, playerElements),
@@ -86,10 +83,10 @@ export const initAudioPlayer = (
       setBandPass(filterNode, minFreq, maxFreq),
     removeBandPass: () => removeBandPass(filterNode),
     setGain: (volume) => setGain(gainNode, volume),
-    pause: () => pauseAudio(state, playerElements),
-    play: () => playAudio(state, playerElements),
+    pause: (stopOffsetZeroOne) => pauseAudio(state, timelineState, sharedState, playerElements, stopOffsetZeroOne),
+    play: (startOffsetZeroOne) => playAudio(state, timelineState, sharedState, playerElements, startOffsetZeroOne),
     togglePlayback: () => togglePlayback(state, timelineState, sharedState, playerElements),
-    startPlayheadDrag: () => startPlayheadDrag(state, playerElements),
+    startPlayheadDrag: () => startPlayheadDrag(state, timelineState, sharedState, playerElements),
     endPlayheadDrag: () => endPlayheadDrag(state, timelineState, sharedState, playerElements),
     dragLocalPlayhead: (x) => dragLocalPlayhead(x, state, timelineState, sharedState, playerElements),
     dragGlobalPlayhead: (x) => dragGlobalPlayhead(x, state, timelineState, sharedState, playerElements),
@@ -118,10 +115,10 @@ const setGain = (gainNode, volume) => {
   return gainNode.gain.value;
 };
 
-const startPlayheadDrag = (state, playerElements) => {
+const startPlayheadDrag = (state, timelineState, sharedState, playerElements) => {
     state.wasPlaying = state.playing;
     if (state.playing) {
-      pauseAudio(state, playerElements);
+      pauseAudio(state, timelineState, sharedState, playerElements, state.audioProgressZeroOne);
     }
 };
 
@@ -132,7 +129,7 @@ const endPlayheadDrag = (
   playerElements
 ) => {
   if (state.wasPlaying) {
-    playAudio(state, timelineState, sharedState, playerElements).then(() => {});
+    playAudio(state, timelineState, sharedState, playerElements, state.audioProgressZeroOne);
   }
 };
 
@@ -145,7 +142,6 @@ const dragGlobalPlayhead = (xZeroOne, state, timelineState, sharedState, playerE
     cancelAnimationFrame(state.dragPlayheadRaf);
     state.dragPlayheadRaf = requestAnimationFrame(async () => {
       state.audioProgressZeroOne = thisOffsetXZeroOne;
-      state.progressSampleTime = performance.now();
       setPlaybackTime(thisOffsetXZeroOne, state, playerElements);
       updatePlayhead(state, timelineState, sharedState, playerElements);
     });
@@ -170,15 +166,21 @@ const dragLocalPlayhead = (
     cancelAnimationFrame(state.dragPlayheadRaf);
     state.dragPlayheadRaf = requestAnimationFrame(async () => {
       state.audioProgressZeroOne = thisOffsetXZeroOne;
-      state.progressSampleTime = performance.now();
+      //state.progressSampleTime = performance.now();
       setPlaybackTime(thisOffsetXZeroOne, state, playerElements);
       updatePlayhead(state, timelineState, sharedState, playerElements);
     });
 };
 
-const setPlaybackTime = (offsetZeroOne, state, playerElements) => {
+const setPlaybackTime = async (offsetZeroOne, state, playerElements) => {
   if (state.audioDuration) {
+    if (state.audioContext.state !== "running") {
+      await state.audioContext.resume();
+    }
     playerElements.audio.currentTime = offsetZeroOne * state.audioDuration;
+    state.audioProgressZeroOne = offsetZeroOne;
+    state.playbackStartTime = performance.now();
+    state.playbackStartOffset = offsetZeroOne;
   }
 };
 
@@ -202,29 +204,51 @@ export const initAudio = async (playerElements, audioFileUrl, state, audioDurati
   });
 };
 
-const playAudio = async (state, timelineState, sharedState, playerElements) => {
+const playAudio = async (state, timelineState, sharedState, playerElements, startAtOffsetZeroOne) => {
+  if (startAtOffsetZeroOne !== undefined) {
+    await setPlaybackTime(startAtOffsetZeroOne, state, playerElements);
+  }
+  if (state.audioProgressZeroOne === 1) {
+    await setPlaybackTime(0, state, playerElements);
+  }
   if (!state.playing) {
-    await state.audioContext.resume();
+    if (state.audioContext.state !== "running") {
+      await state.audioContext.resume();
+    }
     await playerElements.audio.play();
     state.playing = true;
-    state.progressSampleTime = performance.now();
+    state.playbackStartTime = performance.now();
     playerElements.playButton.classList.remove("paused");
-    updatePlayhead(state, timelineState, sharedState, playerElements, true);
+    state.playbackStartOffset = state.audioProgressZeroOne;
+    updatePlayhead(state, timelineState, sharedState, playerElements);
+    state.root.dispatchEvent(
+      new Event("playback-started", {
+        bubbles: false,
+        composed: true,
+        cancelable: false,
+      })
+    );
   }
 };
-const pauseAudio = (state, { playButton, audio }) => {
-  cancelAnimationFrame(state.audioStatusPoll);
-  state.playing = false;
-  audio.pause();
-  playButton.classList.add("paused");
-
-  state.root.dispatchEvent(
-    new Event("playback-ended", {
-      bubbles: false,
-      composed: true,
-      cancelable: false,
-    })
-  );
+const pauseAudio = async (state, timelineState, sharedState, playerElements, stopAtOffsetZeroOne) => {
+  if (stopAtOffsetZeroOne !== undefined) {
+    await setPlaybackTime(stopAtOffsetZeroOne, state, playerElements);
+    updatePlayhead(state, timelineState, sharedState, playerElements);
+  }
+  if (state.playing) {
+    cancelAnimationFrame(state.audioStatusPoll);
+    state.audioStatusPoll = 0;
+    state.playing = false;
+    playerElements.audio.pause();
+    playerElements.playButton.classList.add("paused");
+    state.root.dispatchEvent(
+      new Event("playback-ended", {
+        bubbles: false,
+        composed: true,
+        cancelable: false,
+      })
+    );
+  }
 };
 
 const updatePlayhead = (
@@ -234,17 +258,17 @@ const updatePlayhead = (
   playerElements,
   beganPlaying = false,
   rangeChange = false,
-  forced = false
 ) => {
   const {
     playheadCanvasCtx,
     mainPlayheadCanvasCtx,
   } = playerElements;
-
-  const now = performance.now();
-  const timeSinceSamplingSeconds = (now - state.progressSampleTime) / 1000;
-  const progress = forced ? state.audioProgressZeroOne / state.audioDuration :
-    state.audioProgressZeroOne + timeSinceSamplingSeconds / state.audioDuration;
+  const elapsedSincePlaybackStarted = state.playing ? (performance.now() - (state.playbackStartTime || performance.now())) / 1000 : 0;
+  if (state.playing) {
+    state.audioProgressZeroOne = Math.max(0, Math.min(1, ((state.playbackStartOffset * state.audioDuration) + elapsedSincePlaybackStarted) / state.audioDuration));
+  }
+  const playheadWidth = Math.min(2, 1.5);
+  const progress = state.audioProgressZeroOne;
   playheadCanvasCtx.clearRect(0, 0, playheadCanvasCtx.canvas.width, playheadCanvasCtx.canvas.height);
   mainPlayheadCanvasCtx.clearRect(0, 0, mainPlayheadCanvasCtx.canvas.width, mainPlayheadCanvasCtx.canvas.height);
   if (!Number.isNaN(progress)) {
@@ -252,39 +276,88 @@ const updatePlayhead = (
       // Redraw the minimap playhead on its canvas at the correct offset position.
       const width = playheadCanvasCtx.canvas.width;
       const height = playheadCanvasCtx.canvas.height;
-      playheadCanvasCtx.fillStyle = timelineState.isDarkTheme ? "white" : "black";
-      const left = progress * width - devicePixelRatio;
-      playheadCanvasCtx.fillRect(left, 0, 2 * devicePixelRatio, height);
+      playheadCanvasCtx.fillStyle = timelineState.isDarkTheme ? `rgba(204, 204, 204, 0.8)` : `rgba(0, 0, 0, 0.8)`;
+
+      // Draw the global playhead position
+      const left = Math.min(width - playheadWidth - 1, Math.max(-playheadWidth / 2, progress * width - playheadWidth/2));
+      playheadCanvasCtx.fillRect(left, 0, playheadWidth, height);
     }
     {
       const sevenPx = 7 * devicePixelRatio;
+      const fourPx = 4 * devicePixelRatio;
+      const threePx = 3 * devicePixelRatio;
+      const tenPx = 10 * devicePixelRatio;
       const width = mainPlayheadCanvasCtx.canvas.width;
       const height = mainPlayheadCanvasCtx.canvas.height;
       mainPlayheadCanvasCtx.clearRect(0, 0, width, height);
-      mainPlayheadCanvasCtx.fillStyle = timelineState.isDarkTheme ? "white" : "black";
-      const drawScrubHandles = () => {
+      mainPlayheadCanvasCtx.fillStyle = timelineState.isDarkTheme ? `rgba(204, 204, 204, 1)` : `rgba(0, 0, 0, 1)`;
+      const drawPlayheadScrubHandles = (opacity) => {
         const audioProgressZeroOne = progress;
         const ctx = mainPlayheadCanvasCtx;
         const startZeroOne = timelineState.left;
         const endZeroOne = timelineState.right;
         const height = ctx.canvas.height;
-        const center = audioProgressZeroOne * width;
+        const center = Math.min(audioProgressZeroOne * width, width - 1);
         ctx.beginPath();
         ctx.moveTo(center, height);
-        ctx.lineTo(center - sevenPx, height - sevenPx * 3);
-        ctx.lineTo(center + sevenPx, height - sevenPx * 3);
+        ctx.lineTo(center - fourPx, height - threePx);
+        ctx.lineTo(center - fourPx, height - tenPx);
+        ctx.lineTo(center + fourPx, height - tenPx);
+        ctx.lineTo(center + fourPx, height - threePx);
         ctx.lineTo(center, height);
         ctx.fill();
+        ctx.beginPath();
+        // TODO: Use timelineState.inGlobalPlaybackScrubberHandle and timelineState.inLocalPlaybackScrubberHandle
+        //  to show down/hover states for scrubber handles.
+        if (timelineState.isDarkTheme) {
+          ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
+          ctx.moveTo(center, height);
+          ctx.lineTo(center - fourPx, height - threePx);
+          ctx.lineTo(center - fourPx, height - tenPx);
+          ctx.lineTo(center, height - tenPx);
+          ctx.lineTo(center, height);
+          ctx.fill();
+        } else {
+          ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
+          ctx.moveTo(center, height);
+          ctx.lineTo(center + fourPx, height - threePx);
+          ctx.lineTo(center + fourPx, height - tenPx);
+          ctx.lineTo(center, height - tenPx);
+          ctx.lineTo(center, height);
+          ctx.fill();
+        }
 
-        if (audioProgressZeroOne >= startZeroOne && audioProgressZeroOne <= endZeroOne) {
+        {
+          ctx.fillStyle = timelineState.isDarkTheme ? `rgba(204, 204, 204, ${opacity})` : `rgba(0, 0, 0, ${opacity})`;
           const localProgress = (audioProgressZeroOne - startZeroOne) / (endZeroOne - startZeroOne);
           const center = localProgress * width;
+          const height = tenPx + 0.5;
           ctx.beginPath();
-          ctx.moveTo(center, sevenPx * 3);
-          ctx.lineTo(center - sevenPx, 1);
-          ctx.lineTo(center + sevenPx, 1);
-          ctx.lineTo(center, sevenPx * 3);
+          ctx.moveTo(center, height);
+          ctx.lineTo(center - fourPx, height - threePx);
+          ctx.lineTo(center - fourPx, height - tenPx);
+          ctx.lineTo(center + fourPx, height - tenPx);
+          ctx.lineTo(center + fourPx, height - threePx);
+          ctx.lineTo(center, height);
           ctx.fill();
+          ctx.beginPath();
+          if (timelineState.isDarkTheme) {
+            ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(opacity, 0.15)})`;
+            ctx.moveTo(center, height);
+            ctx.lineTo(center - fourPx, height - threePx);
+            ctx.lineTo(center - fourPx, height - tenPx);
+            ctx.lineTo(center, height - tenPx);
+            ctx.lineTo(center, height);
+            ctx.fill();
+          } else {
+            ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(opacity, 0.25)})`;
+            ctx.moveTo(center, height);
+            ctx.lineTo(center + fourPx, height - threePx);
+            ctx.lineTo(center + fourPx, height - tenPx);
+            ctx.lineTo(center, height - tenPx);
+            ctx.lineTo(center, height);
+            ctx.fill();
+          }
         }
       }
 
@@ -306,20 +379,25 @@ const updatePlayhead = (
           }
         })
       );
-
+      const range = timelineState.right - timelineState.left;
+      let opacity = 1;
+      if (range >= 0.75) {
+        opacity = mapRange(range, 0.75, 1, 1, 0.1);
+      }
       if (playheadInRange) {
-        const range = timelineState.right - timelineState.left;
+        drawPlayheadScrubHandles(opacity);
+        mainPlayheadCanvasCtx.fillStyle = timelineState.isDarkTheme ? `rgba(204, 204, 204, ${opacity})` : `rgba(0, 0, 0, ${opacity})`;
+        // Draw the local (zoomed area) playhead position
         const pro = (progress - timelineState.left) / range;
-        const left = pro * width - devicePixelRatio;
+        const left = Math.max(0, Math.min(width - playheadWidth, pro * width - playheadWidth / 2));
         state.followPlayhead = true;
-        mainPlayheadCanvasCtx.fillRect(left, (sevenPx * 3) - 2, 2 * devicePixelRatio, height);
-        drawScrubHandles();
+        mainPlayheadCanvasCtx.fillRect(left, tenPx + 0.5, playheadWidth, height);
         // NOTE: Advance range if playhead was inside range when playback started.
       } else if (state.followPlayhead && !sharedState.interacting) {
         const range = timelineState.right - timelineState.left;
         timelineState.right = Math.min(1, timelineState.right + range);
         timelineState.left = timelineState.right - range;
-        drawScrubHandles();
+        drawPlayheadScrubHandles();
 
         playerElements.overlayCanvas.dispatchEvent(
           new CustomEvent("range-change", {
@@ -330,7 +408,7 @@ const updatePlayhead = (
           })
         );
       } else {
-        drawScrubHandles();
+        drawPlayheadScrubHandles(opacity);
         state.followPlayhead = false;
       }
     }
@@ -341,7 +419,7 @@ const togglePlayback = async (state, timelineState, sharedState, playerElements)
   if (!state.playing) {
     await playAudio(state, timelineState, sharedState, playerElements);
   } else {
-    pauseAudio(state, playerElements);
+    await pauseAudio(state, timelineState, sharedState, playerElements);
   }
   return state.playing;
 };

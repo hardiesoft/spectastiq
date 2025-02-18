@@ -4,7 +4,7 @@ export class FftContext {
   private constructor();
   free(): void;
   static new(): FftContext;
-  processAudio(max_output: Float32Array, prelude: Float32Array, data: Float32Array, output: Float32Array): void;
+  processAudio(prelude: Float32Array, data: Float32Array, output: Float32Array): void;
 }
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -13,7 +13,7 @@ export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly __wbg_fftcontext_free: (a: number, b: number) => void;
   readonly fftcontext_new: () => number;
-  readonly fftcontext_processAudio: (a: number, b: number, c: number, d: any, e: number, f: number, g: number, h: number, i: number, j: number, k: any) => void;
+  readonly fftcontext_processAudio: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any) => void;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

@@ -368,7 +368,7 @@ export const drawTimelineUI =
   (timelineElements, state) => (startZeroOne, endZeroOne, currentAction) => {
     // Draw handles on timelineUICanvas.
     const isDarkTheme = state.isDarkTheme;
-    const c = isDarkTheme ? 34 : 50;
+    const c = isDarkTheme ? 255 : 50;
     const ctx = timelineElements.timelineUICanvas.getContext("2d");
     const width = ctx.canvas.width;
     const height = ctx.canvas.height;
@@ -381,7 +381,8 @@ export const drawTimelineUI =
     const handleWidth = (end - start) - onePx;
     const minHandleWidth = 44 * devicePixelRatio;
     const handleIsNarrow = handleWidth < minHandleWidth
-
+    const unselectedHandleColor = isDarkTheme ? "#b1b2b5" : "#595959";
+    const selectedHandleColor = isDarkTheme ? "#cccdd1" : "#333333";
     const resizeHandleAt = (x, color, cX) => {
       const y = (height / 2) - handleHeight / 2;
       const halfWidth = resizeHandleWidth / 2;
@@ -419,70 +420,57 @@ export const drawTimelineUI =
     const vStep1 = height / 2;
     const vStep2 = (height / 4) * 3;
 
+    const drawPanHandlePath = (handleIsNarrow, selected) => {
+      if (!handleIsNarrow) {
+        if (!selected) {
+          ctx.roundRect(Math.max(halfPx, start), halfPx, handleWidth, height - onePx, threePx);
+        } else {
+          ctx.roundRect(start + onePx, onePx, handleWidth - onePx, height - twoPx, threePx);
+        }
+      } else {
+        // Something fancy, a kind of funnel from the wide grabby bit of the handle to the width that shows how wide
+        // the current selection range actually is.
+        const left = Math.max(halfPx, start);
+        const leftWideExtreme = Math.min(width - minHandleWidth - halfPx, Math.max(halfPx, left - (minHandleWidth / 2) + (handleWidth / 2)));
+        const rightWideExtreme = leftWideExtreme + minHandleWidth;//(minHandleWidth / 2) - (handleWidth / 2);
+        const top = halfPx;
+        const bottom = height - onePx;
+
+        ctx.moveTo(left, top);
+        ctx.lineTo(left + handleWidth - threePx, halfPx);
+        ctx.arcTo(left + handleWidth, halfPx, left + handleWidth, halfPx + threePx, threePx);
+        ctx.bezierCurveTo(left + handleWidth, vStep2, rightWideExtreme, vStep1, rightWideExtreme, bottom - threePx);
+        ctx.arcTo(rightWideExtreme, bottom, rightWideExtreme - threePx, bottom, threePx);
+        ctx.lineTo(leftWideExtreme + threePx, bottom);
+        ctx.arcTo(leftWideExtreme, bottom, leftWideExtreme, bottom - threePx, threePx);
+        ctx.bezierCurveTo(leftWideExtreme, vStep1, left, vStep2, left, top + threePx);
+        ctx.arcTo(left, top, left + threePx, top, threePx);
+      }
+    }
+
 
     // Draw track and pan handle cutout
-    if (!handleIsNarrow) {
-      ctx.roundRect(Math.max(halfPx, start), halfPx, handleWidth, height - onePx, threePx);
-    } else {
-      // Something fancy
-      ctx.moveTo(Math.max(halfPx, start), halfPx);
-      ctx.lineTo(start + handleWidth, halfPx);
-      ctx.lineTo(start + handleWidth, vStep1);
-      ctx.lineTo(start + handleWidth + (minHandleWidth / 2) - (handleWidth / 2), vStep2);
-      ctx.lineTo(start + handleWidth + (minHandleWidth / 2) - (handleWidth / 2), height - onePx);
-      ctx.lineTo(start - (minHandleWidth / 2) + (handleWidth / 2), height - onePx);
-      ctx.lineTo(start - (minHandleWidth / 2) + (handleWidth / 2), vStep2);
-      ctx.lineTo(Math.max(halfPx, start), vStep1);
-      ctx.lineTo(Math.max(halfPx, start), halfPx);
-    }
+    drawPanHandlePath(handleIsNarrow, false);
     ctx.fill("evenodd");
 
     // Stroke pan handle
     ctx.beginPath();
     if (currentAction === "pan") {
-      ctx.strokeStyle = `rgba(${c}, ${c}, ${c}, 1)`;
+      ctx.strokeStyle = selectedHandleColor;//`rgba(${c}, ${c}, ${c}, 1)`;
       ctx.lineWidth = twoPx;
-      if (!handleIsNarrow) {
-        ctx.roundRect(start + onePx, onePx, handleWidth - onePx, height - twoPx, threePx);
-      } else {
-        // Something fancy
-        ctx.moveTo(Math.max(halfPx, start), halfPx);
-        ctx.lineTo(start + handleWidth, halfPx);
-        ctx.lineTo(start + handleWidth, vStep1);
-        ctx.lineTo(start + handleWidth + (minHandleWidth / 2) - (handleWidth / 2), vStep2);
-        ctx.lineTo(start + handleWidth + (minHandleWidth / 2) - (handleWidth / 2), height - onePx);
-        ctx.lineTo(start - (minHandleWidth / 2) + (handleWidth / 2), height - onePx);
-        ctx.lineTo(start - (minHandleWidth / 2) + (handleWidth / 2), vStep2);
-        ctx.lineTo(Math.max(halfPx, start), vStep1);
-        ctx.lineTo(Math.max(halfPx, start), halfPx);
-      }
+      drawPanHandlePath(handleIsNarrow, true);
     } else {
-      ctx.strokeStyle = `rgba(${c}, ${c}, ${c}, 0.75)`;
+      ctx.strokeStyle = unselectedHandleColor;//`rgba(${c}, ${c}, ${c}, 0.75)`;
       ctx.lineWidth = onePx;
-      if (!handleIsNarrow) {
-        ctx.roundRect(Math.max(halfPx, start), halfPx, handleWidth, height - onePx, threePx);
-      } else {
-        // Something fancy
-        ctx.moveTo(Math.max(halfPx, start), halfPx);
-        ctx.lineTo(start + handleWidth, halfPx);
-        ctx.lineTo(start + handleWidth, vStep1);
-        ctx.lineTo(start + handleWidth + (minHandleWidth / 2) - (handleWidth / 2), vStep2);
-        ctx.lineTo(start + handleWidth + (minHandleWidth / 2) - (handleWidth / 2), height - onePx);
-        ctx.lineTo(start - (minHandleWidth / 2) + (handleWidth / 2), height - onePx);
-        ctx.lineTo(start - (minHandleWidth / 2) + (handleWidth / 2), vStep2);
-        ctx.lineTo(Math.max(halfPx, start), vStep1);
-        ctx.lineTo(Math.max(halfPx, start), halfPx);
-      }
+      drawPanHandlePath(handleIsNarrow, false);
     }
     ctx.stroke();
 
     // Draw resize handles
     const resizeHandleWidth = 8 * devicePixelRatio;
     const handleHeight = 24 * devicePixelRatio;
-    const unselectedHandleColor = isDarkTheme ? "#b1b2b5" : "#595959";
-    const selectedHandleColor = isDarkTheme ? "#cccdd1" : "#333333";
-    const leftHandleColour = currentAction === "resize-left" ? selectedHandleColor : unselectedHandleColor;
-    const rightHandleColour = currentAction === "resize-right" ? selectedHandleColor : unselectedHandleColor;
+    const leftHandleColour = currentAction === "resize-left" || state.overLeftHandle ? selectedHandleColor : unselectedHandleColor;
+    const rightHandleColour = currentAction === "resize-right" || state.overRightHandle ? selectedHandleColor : unselectedHandleColor;
     const halfWidth = resizeHandleWidth / 2;
     let leftX;
     const leftC = Math.min(halfWidth, halfWidth - Math.min(halfWidth, halfWidth - start));
@@ -584,12 +572,16 @@ export const initTimeline = (
     drawTimelineUI,
     pointers: {},
     regionCreationMode: false,
+    overLeftHandle: false,
+    overRightHandle: false,
+    overPanHandle: false,
+    overSeekTrack: false,
   };
 
   state.drawTimelineUI = drawTimelineUI(timelineElements, state)
 
   const hitTestTimeline = (xOffsetZeroOne) => {
-
+    //console.log("hitTestTimeline", xOffsetZeroOne);
     const resizeHandleWidthCssPx = 44;
     const handleWidthZeroOne = resizeHandleWidthCssPx / (timelineElements.canvas.width / devicePixelRatio);
 
@@ -598,22 +590,47 @@ export const initTimeline = (
     let rightResizeRight = Math.min(1, state.right + (handleWidthZeroOne * 0.5));
     let rightResizeLeft = rightResizeRight - handleWidthZeroOne;
 
+    // TODO: Correctly handle if the pan handle is very narrow at either extreme of the timeline.
     const panHandleWidth = rightResizeLeft - leftResizeRight;
     if (panHandleWidth < handleWidthZeroOne) {
       leftResizeLeft = Math.max(0, state.left - (handleWidthZeroOne * 0.5) - (handleWidthZeroOne - panHandleWidth) * 0.5);
       rightResizeRight = Math.min(1, state.right + (handleWidthZeroOne * 0.5) + (handleWidthZeroOne - panHandleWidth) * 0.5);
     }
+    rightResizeLeft = rightResizeRight - handleWidthZeroOne;
+    if (leftResizeLeft === 0 && rightResizeLeft < handleWidthZeroOne) {
+      leftResizeLeft = -handleWidthZeroOne;
+    }
     leftResizeRight = leftResizeLeft + handleWidthZeroOne;
     rightResizeLeft = rightResizeRight - handleWidthZeroOne;
+
+    // const ctx = timelineElements.timelineUICanvas.getContext("2d");
+    // ctx.save();
+    // ctx.strokeStyle = 'red';
+    // console.log("leftResizeLeft", leftResizeLeft);
+    // console.log("rightResizeLeft", rightResizeLeft);
+    // ctx.strokeRect(leftResizeLeft * ctx.canvas.width, 0, (leftResizeRight - leftResizeLeft) * ctx.canvas.width, ctx.canvas.height);
+    // ctx.strokeRect(rightResizeLeft * ctx.canvas.width, 0, (rightResizeRight - rightResizeLeft) * ctx.canvas.width, ctx.canvas.height);
+    // ctx.restore();
 
     const inResizeHandleLeft = xOffsetZeroOne >= leftResizeLeft && xOffsetZeroOne <= leftResizeRight;
     const inResizeHandleRight = xOffsetZeroOne >= rightResizeLeft && xOffsetZeroOne <= rightResizeRight;
     const inMainPanHandle = xOffsetZeroOne >= leftResizeLeft && xOffsetZeroOne <= rightResizeRight;
     const inSeekTrack = !inMainPanHandle;
+    const targetChanged = (
+      state.overLeftHandle !== inResizeHandleLeft ||
+      state.overRightHandle !== inResizeHandleRight ||
+      state.overPanHandle !== inMainPanHandle ||
+      state.overSeekTrack !== inSeekTrack
+    );
+    state.overLeftHandle = inResizeHandleLeft;
+    state.overRightHandle = inResizeHandleRight;
+    state.overPanHandle = inMainPanHandle;
+    state.overSeekTrack = inSeekTrack;
     return {
       inResizeHandleLeft,
       inResizeHandleRight,
-      inSeekTrack
+      inSeekTrack,
+      targetChanged,
     };
   }
 
@@ -630,12 +647,15 @@ export const initTimeline = (
       inResizeHandleLeft,
       inResizeHandleRight,
       inSeekTrack,
+      targetChanged,
     } = hitTestTimeline(xOffsetZeroOne);
 
+    let redrawnUI = false;
     if (inSeekTrack) {
       // Clicking outside handle.
       if (!state.currentAction) {
         clickOutsideHandle(state, timelineElements, xOffsetZeroOne);
+        redrawnUI = true;
       }
     } else {
       if (inResizeHandleLeft) {
@@ -645,6 +665,13 @@ export const initTimeline = (
       } else {
         startHandleDrag(e, timelineElements, state, xOffsetZeroOne)
       }
+      redrawnUI = true;
+    }
+    if (targetChanged && !redrawnUI) {
+      // Redraw UI for i.e. hover events
+      timelineElements.overlayCanvas.dispatchEvent(
+        new Event("interaction-target-changed")
+      );
     }
   });
   timelineElements.timelineUICanvas.addEventListener("pointerup", (e) => {
@@ -662,6 +689,15 @@ export const initTimeline = (
           break;
       }
     }
+  });
+  timelineElements.timelineUICanvas.addEventListener("pointerleave", (e) => {
+    state.overSeekTrack = false;
+    state.overLeftHandle = false;
+    state.overRightHandle = false;
+    state.overPanHandle = false;
+    timelineElements.overlayCanvas.dispatchEvent(
+      new Event("interaction-target-changed")
+    );
   });
   timelineElements.timelineUICanvas.addEventListener("pointermove", (e) => {
     e.preventDefault();
@@ -683,6 +719,7 @@ export const initTimeline = (
         inResizeHandleLeft,
         inResizeHandleRight,
         inSeekTrack,
+        targetChanged,
       } = hitTestTimeline(xOffsetZeroOne);
 
       // Add classes to DOM for cursors?
@@ -700,8 +737,54 @@ export const initTimeline = (
           timelineElements.timelineUICanvas.classList.remove("grab", "resize", "grabbing");
         }
       }
+      if (targetChanged) {
+        // Redraw UI for i.e. hover events
+        timelineElements.overlayCanvas.dispatchEvent(
+          new Event("interaction-target-changed")
+        );
+      }
     }
   });
+
+  const hitTestScrubHandles = (x, y) => {
+    const numPointers = Object.keys(state.pointers).length;
+    const atBottom = y > (timelineElements.canvas.height / devicePixelRatio) - 44;
+    const atTop = y < 44;
+    let inLocalPlaybackScrubberHandle = false;
+    let inGlobalPlaybackScrubberHandle = false;
+    if (numPointers < 2 && (atTop || atBottom)) {
+      const audioProgressZeroOne = state.audioState.audioProgressZeroOne;
+      const minHandleWidth = 44;
+      const width = timelineElements.mainPlayheadCanvas.width / devicePixelRatio;
+      if (atTop && audioProgressZeroOne >= state.left && audioProgressZeroOne <= state.right) {
+        const localProgress = (audioProgressZeroOne - state.left) / (state.right - state.left);
+        const localPlaybackLeft = Math.max(0, (localProgress * width) - minHandleWidth / 2);
+        const localPlaybackRight = localPlaybackLeft + minHandleWidth;
+        if (x >= localPlaybackLeft && x <= localPlaybackRight) {
+          inLocalPlaybackScrubberHandle = true;
+        }
+      } else if (atBottom) {
+        const globalPlaybackLeft = Math.max(0, (audioProgressZeroOne * width) - minHandleWidth / 2);
+        const globalPlaybackRight = globalPlaybackLeft + minHandleWidth;
+        if (x >= globalPlaybackLeft && x <= globalPlaybackRight) {
+          inGlobalPlaybackScrubberHandle = true;
+        }
+      }
+    }
+    const targetChanged = (
+      state.inLocalPlaybackScrubberHandle !== inLocalPlaybackScrubberHandle ||
+      state.inGlobalPlaybackScrubberHandle !== inGlobalPlaybackScrubberHandle
+    );
+    state.inLocalPlaybackScrubberHandle = inLocalPlaybackScrubberHandle;
+    state.inGlobalPlaybackScrubberHandle = inGlobalPlaybackScrubberHandle;
+
+    return {
+      inLocalPlaybackScrubberHandle,
+      inGlobalPlaybackScrubberHandle,
+      targetChanged,
+    }
+  };
+
   timelineElements.timelineUICanvas.addEventListener("pointercancel", (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -718,7 +801,6 @@ export const initTimeline = (
       }
     }
   });
-
   timelineElements.overlayCanvas.addEventListener("wheel", (e) => {
     e.preventDefault();
     const xOffset = e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
@@ -755,56 +837,50 @@ export const initTimeline = (
       e.preventDefault();
       let numPointers = Object.keys(state.pointers).length;
       if (numPointers < 2) {
-        state.pointers[e.pointerId] = {x: e.offsetX, y: e.offsetY};
+        state.pointers[e.pointerId] = {x: e.offsetX, y: e.offsetY, time: performance.now()};
         timelineElements.overlayCanvas.setPointerCapture(e.pointerId);
       }
-      numPointers = Object.keys(state.pointers).length;
-      const atBottom = e.offsetY > (timelineElements.canvas.height / devicePixelRatio) - 44;
-      const atTop = e.offsetY < 44;
+      const {
+        inLocalPlaybackScrubberHandle, inGlobalPlaybackScrubberHandle
+      } = hitTestScrubHandles(e.offsetX, e.offsetY);
       state.interactionStartX = e.offsetX;
       state.interactionStartY = e.offsetY;
-      if (numPointers === 1 && (atTop || atBottom)) {
-        const audioProgressZeroOne = state.audioState.audioProgressZeroOne;
-        const minHandleWidth = 44 * devicePixelRatio;
-        const width = timelineElements.mainPlayheadCanvas.width / devicePixelRatio;
-        if (atTop && audioProgressZeroOne >= state.left && audioProgressZeroOne <= state.right) {
-          const localProgress = (audioProgressZeroOne - state.left) / (state.right - state.left);
-          const localPlaybackLeft = Math.max(0, (localProgress * width) - minHandleWidth / 2);
-          const localPlaybackRight = localPlaybackLeft + minHandleWidth;
-          if (e.offsetX >= localPlaybackLeft && e.offsetX <= localPlaybackRight) {
-            // Drag local playtime scrubber
-            state.scrubLocalStarted = true;
-            state.scrubDragOffsetX = e.offsetX - (localProgress * width);
-            state.startPlayheadDrag();
-            if (e.pointerType === "mouse") {
-              if (!timelineElements.spectrogramContainer.classList.contains("dragging")) {
-                timelineElements.spectrogramContainer.classList.add("dragging");
-              }
-            }
+      const width = timelineElements.mainPlayheadCanvas.width / devicePixelRatio;
+      if (inGlobalPlaybackScrubberHandle) {
+        // Drag global playtime scrubber
+        state.scrubGlobalStarted = true;
+
+        state.scrubDragOffsetX = e.offsetX - (state.audioState.audioProgressZeroOne * width);
+        state.startPlayheadDrag();
+        if (e.pointerType === "mouse") {
+          if (!timelineElements.spectrogramContainer.classList.contains("dragging")) {
+            timelineElements.spectrogramContainer.classList.add("dragging");
           }
-        } else if (atBottom) {
-          const globalPlaybackLeft = Math.max(0, (audioProgressZeroOne * width) - minHandleWidth / 2);
-          const globalPlaybackRight = globalPlaybackLeft + minHandleWidth;
-          if (e.offsetX >= globalPlaybackLeft && e.offsetX <= globalPlaybackRight) {
-            // Drag global playtime scrubber
-            state.scrubGlobalStarted = true;
-            state.scrubDragOffsetX = e.offsetX - (audioProgressZeroOne * width);
-            state.startPlayheadDrag();
-            if (e.pointerType === "mouse") {
-              if (!timelineElements.spectrogramContainer.classList.contains("dragging")) {
-                timelineElements.spectrogramContainer.classList.add("dragging");
-              }
-            }
+        }
+      } else if (inLocalPlaybackScrubberHandle) {
+        // Drag local playtime scrubber
+        state.scrubLocalStarted = true;
+        const localProgress = (state.audioState.audioProgressZeroOne - state.left) / (state.right - state.left);
+        state.scrubDragOffsetX = e.offsetX - (localProgress * width);
+        state.startPlayheadDrag();
+        if (e.pointerType === "mouse") {
+          if (!timelineElements.spectrogramContainer.classList.contains("dragging")) {
+            timelineElements.spectrogramContainer.classList.add("dragging");
           }
         }
       }
     }
   });
+  timelineElements.overlayCanvas.addEventListener("pointerleave", (e) => {
+    state.inGlobalPlaybackScrubberHandle = false;
+    state.inLocalPlaybackScrubberHandle = false;
+    timelineElements.overlayCanvas.dispatchEvent(new Event("interaction-target-changed"));
+  });
 
   timelineElements.overlayCanvas.addEventListener("pointermove", (e) => {
     e.preventDefault();
     if (e.pointerType === "touch" || (e.pointerType === "mouse" && e.button !== -1) || e.pressure > 0) {
-      state.pointers[e.pointerId] = {x: e.offsetX, y: e.offsetY};
+      state.pointers[e.pointerId] = {x: e.offsetX, y: e.offsetY, time: performance.now()};
       onPointerMove(timelineElements.overlayCanvas, state, sharedState);
       if (state.panStarted && e.pointerType === "mouse") {
         if (!timelineElements.spectrogramContainer.classList.contains("dragging")) {
@@ -822,6 +898,13 @@ export const initTimeline = (
         }))
       }
     } else if (e.pointerType === "mouse" && e.pressure === 0) {
+      const {
+        targetChanged
+      } = hitTestScrubHandles(e.offsetX, e.offsetY);
+      if (targetChanged) {
+        timelineElements.overlayCanvas.dispatchEvent(new Event("interaction-target-changed"));
+      }
+
       // NOTE: Re-dispatch mousemove for user/client embed handling.
       root.dispatchEvent(new CustomEvent("move", {
         bubbles: false,
@@ -836,9 +919,46 @@ export const initTimeline = (
     }
   });
 
+
+  const distanceBetweenPoints = (x1, y1, x2, y2) => {
+    const dX = Math.abs(x1 - x2);
+    const dY = Math.abs(y1 - y2);
+    return Math.sqrt(dX * dX + dY * dY);
+  };
+  const clampZeroOne = (x) => Math.max(0, Math.min(1, x));
+
   const endPointerInteraction = (e) => {
     e.preventDefault();
+    const maxDoubleClickIntervalMs = 200;
     timelineElements.overlayCanvas.releasePointerCapture(e.pointerId);
+    let doubleClickEventEmitted = false;
+    if (state.pointers[e.pointerId] && Object.keys(state.pointers).length === 1) {
+      const timeElapsed = performance.now() - state.pointers[e.pointerId].time;
+      const distanceMoved = distanceBetweenPoints(state.pointers[e.pointerId].x, state.pointers[e.pointerId].y, e.offsetX, e.offsetY);
+      // NOTE: This need to be a double-click, because a single click action would clash with the select action
+      //  We need to delay the select action my `maxDoubleClickInterval` to make sure
+      //  it wasn't the beginning of a double-click action.
+      if (distanceMoved < 4 * devicePixelRatio && timeElapsed < 200) {
+        clearTimeout(state.selectPending);
+        if (state.doubleClickInProgress) {
+          const timeElapsed = performance.now() - state.doubleClickInProgress.time;
+          const distanceMoved = distanceBetweenPoints(state.doubleClickInProgress.x, state.doubleClickInProgress.y, e.offsetX, e.offsetY);
+          if (distanceMoved < 4 * devicePixelRatio && timeElapsed < maxDoubleClickIntervalMs) {
+            const offsetZeroOne = e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
+            const c = clampZeroOne(offsetZeroOne);
+            const audioOffsetZeroOne = state.left + (c * (state.right - state.left));
+            doubleClickEventEmitted = true;
+            timelineElements.overlayCanvas.dispatchEvent(new CustomEvent("double-click", {
+              detail: {
+                audioOffsetZeroOne,
+              }
+            }));
+          }
+        }
+        state.doubleClickInProgress = { x: e.offsetX, y: e.offsetY, time: performance.now() };
+      }
+    }
+
     delete state.pointers[e.pointerId];
     const numPointers = Object.keys(state.pointers).length;
     if (numPointers < 2) {
@@ -857,18 +977,23 @@ export const initTimeline = (
           const dY = Math.abs(state.interactionStartY - e.offsetY);
           return dX > 4 || dY > 4;
         };
-        if (!state.scrubLocalStarted && !state.scrubGlobalStarted && !state.pinchStarted && (!state.panStarted || (state.panStarted && !pointerMoved()))) {
+        const movedEnough = pointerMoved();
+        if (!movedEnough || (!state.scrubLocalStarted && !state.scrubGlobalStarted && !state.pinchStarted && (!state.panStarted || (state.panStarted && !movedEnough)))) {
           // Clicked without moving pointer
-          root.dispatchEvent(new CustomEvent("select", {
-            bubbles: false,
-            composed: true,
-            cancelable: false,
-            detail: {
-              offsetX: e.offsetX,
-              offsetY: e.offsetY,
-              container: timelineElements.spectrogramContainer
-            }
-          }));
+          if (!doubleClickEventEmitted) {
+            state.selectPending = setTimeout(() => {
+              root.dispatchEvent(new CustomEvent("select", {
+                bubbles: false,
+                composed: true,
+                cancelable: false,
+                detail: {
+                  offsetX: e.offsetX,
+                  offsetY: e.offsetY,
+                  container: timelineElements.spectrogramContainer
+                }
+              }));
+            }, maxDoubleClickIntervalMs);
+          }
         }
         if (timelineElements.spectrogramContainer.classList.contains("dragging")) {
           timelineElements.spectrogramContainer.classList.remove("dragging");

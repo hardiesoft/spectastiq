@@ -4,14 +4,15 @@ declare class Spectastiq extends HTMLElement {
     endZeroOne: number,
     minZeroOne: number,
     maxZeroOne: number
-  ) => void;
+  ) => Promise<void>;
   setPlaybackFrequencyBandPass: (minFreqHz: number, maxFreqHz: number) => void;
   removePlaybackFrequencyBandPass: () => void;
   enterRegionCreationMode: () => void;
   exitRegionCreationMode: () => void;
   resetYZoom: () => void;
   transformY: (y: number) => number;
-  togglePlayback: () => Promise<boolean>;
+  play: (startAtOffsetZeroOne?: number) => Promise<void>;
+  pause: (stopAtOffsetZeroOne?: number) => Promise<void>;
   setGain: (gain: number) => number;
   nextPalette: () => string;
 }
@@ -54,7 +55,8 @@ export interface SpectastiqRenderEvent extends CustomEvent<RangeChangeEvent> {
   type: "render";
 }
 
-export interface SpectastiqPlayheadEvent extends CustomEvent<PlayheadChangeEvent> {
+export interface SpectastiqPlayheadEvent
+  extends CustomEvent<PlayheadChangeEvent> {
   type: "playhead-update";
 }
 
@@ -70,15 +72,22 @@ interface SpectastiqPlaybackEndedEvent extends Event {
   type: "playback-ended";
 }
 
-interface SpectastiqPointerMoveEvent extends CustomEvent<InteractionCoordinatesEvent> {
+interface SpectastiqPlaybackStartedEvent extends Event {
+  type: "playback-started";
+}
+
+interface SpectastiqPointerMoveEvent
+  extends CustomEvent<InteractionCoordinatesEvent> {
   type: "move";
 }
 
-interface SpectastiqSelectEvent extends CustomEvent<InteractionCoordinatesEvent> {
+interface SpectastiqSelectEvent
+  extends CustomEvent<InteractionCoordinatesEvent> {
   type: "select";
 }
 
-interface SpectastiqRegionCreationEvent extends CustomEvent<RegionCreationEvent> {
+interface SpectastiqRegionCreationEvent
+  extends CustomEvent<RegionCreationEvent> {
   type: "region-create";
 }
 
@@ -87,13 +96,14 @@ declare global {
     "spectastiq-viewer": Spectastiq;
   }
   interface HTMLElementEventMap {
-    "render": SpectastiqRenderEvent;
+    render: SpectastiqRenderEvent;
     "audio-loaded": SpectastiqLoadedEvent;
-    "ready": SpectastiqReadyEvent;
+    ready: SpectastiqReadyEvent;
     "playhead-update": SpectastiqPlayheadEvent;
+    "playback-started": SpectastiqPlaybackStartedEvent;
     "playback-ended": SpectastiqPlaybackEndedEvent;
-    "move": SpectastiqPointerMoveEvent;
-    "select": SpectastiqSelectEvent;
+    move: SpectastiqPointerMoveEvent;
+    select: SpectastiqSelectEvent;
     "region-create": SpectastiqRegionCreationEvent;
   }
 }

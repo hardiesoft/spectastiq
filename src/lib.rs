@@ -36,7 +36,7 @@ impl FftContext {
     }
 
     #[wasm_bindgen(js_name = processAudio)]
-    pub fn process_audio(&mut self, max_output: &mut [f32], prelude: &[f32], data: &[f32], output: &mut [f32]) {
+    pub fn process_audio(&mut self, prelude: &[f32], data: &[f32], output: &mut [f32]) {
         let len = data.len() + prelude.len();
         let width = output.len() / HALF_CHUNK_LEN;
         // Chunkify:
@@ -60,10 +60,9 @@ impl FftContext {
 
         // sliding window function across output, which is 1024 wide
         // equiv: &mut output.windows(half_chunk_len);//s[n * half_chunk_len..(n + 1) * half_chunk_len]
-        let mut max = 0.0;
         while n < width {
             let p = j as usize * STEP;
-            let m_max = transform(
+            transform(
                 fft,
                 &mut output[n * HALF_CHUNK_LEN..(n + 1) * HALF_CHUNK_LEN],
                 scratch,
@@ -71,14 +70,9 @@ impl FftContext {
                 prelude.iter().chain(data.iter()).skip(p).take(CHUNK_LEN),
                 &self.filter,
             );
-            max = f32::max(
-                m_max,
-                max,
-            );
             j += chunk_width_ratio;
             n += 1;
         }
-        max_output[0] = max;
     }
 }
 
@@ -104,20 +98,17 @@ fn transform<'a>(
     filtered_scratch: &mut [Complex<f32>],
     signal: impl Iterator<Item = &'a f32>,
     window_fn_cache: &[f32; CHUNK_LEN],
-) -> f32 {
+) {
     for ((val, filter), out) in signal.zip(window_fn_cache).zip(&mut filtered_scratch[..]) {
         *out = Complex::new(val * filter, 0.0);
     }
     fft.process_with_scratch(filtered_scratch, &mut scratch[..]);
     // NOTE: We only need half of the output, since it is mirrored.
     let first_half = filtered_scratch.split_at((filtered_scratch.len() + 1) / 2).0;
-    let mut max = 0.0;
     for (input, output) in first_half.iter().zip(result) {
         let val = input.scale(10000.0 * 1000.0).norm();
-        max = f32::max(max, val);
         *output = val;
     }
-    max
 }
 
 fn init_blackman_harris() -> [f32; CHUNK_LEN] {
