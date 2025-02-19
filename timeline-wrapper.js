@@ -981,14 +981,16 @@ export const initTimeline = (
         if (!movedEnough || (!state.scrubLocalStarted && !state.scrubGlobalStarted && !state.pinchStarted && (!state.panStarted || (state.panStarted && !movedEnough)))) {
           // Clicked without moving pointer
           if (!doubleClickEventEmitted) {
+            const x = e.offsetX;
+            const y = e.offsetY;
             state.selectPending = setTimeout(() => {
               root.dispatchEvent(new CustomEvent("select", {
                 bubbles: false,
                 composed: true,
                 cancelable: false,
                 detail: {
-                  offsetX: e.offsetX,
-                  offsetY: e.offsetY,
+                  offsetX: x,
+                  offsetY: y,
                   container: timelineElements.spectrogramContainer
                 }
               }));
