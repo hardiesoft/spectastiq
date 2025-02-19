@@ -465,19 +465,23 @@ async function renderArrayBuffer(
     // Maybe we need to calculate the min/maxes here after cropping anyway?
     // We remove values at the top of the clip less than 10,000
     console.log("Dynamic range", state.min, state.max);
-    // TODO: Crop off noise floor?
+
   }
   if (!state.max) {
     const sliceLen = FFT_WIDTH / 2;
     let min = Number.MAX_VALUE;
     let max = 0;
+    // NOTE: Don't use the very beginning of the file, sometimes they have weird noise
     for (
-      let j = 0;
+      let j = 100;
       j < state.sharedOutputData.length;
       j += sliceLen
     ) {
+      // NOTE: Crop off noise floor.
       const slice = state.sharedOutputData.slice(j, j + sliceLen);
-      for (let i = 0; i < state.clip; i++) {
+      // console.log("noise floor", (12 /1024) * state.actualSampleRate);
+      // TODO: Work out actual frequency cutoff of around 500hz
+      for (let i = 12; i < state.clip; i++) {
         const val = slice[i];
         min = Math.min(min, val);
         max = Math.max(max, val);
