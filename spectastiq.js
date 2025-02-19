@@ -316,6 +316,9 @@ export default class Spectastiq extends HTMLElement {
   disconnectedCallback() {
     this.terminateWorkers && this.terminateWorkers();
     this.terminateWorkers = null;
+    this.pause(0).then(() => {
+      this.unload();
+    });
   }
 
   get src() {
@@ -401,6 +404,9 @@ export default class Spectastiq extends HTMLElement {
     };
     this.sharedState.interacting = false;
     (async () => {
+      if (audioState && audioState.playing) {
+        await this.pause(0);
+      }
       this.unload();
       this.beginLoad();
 
@@ -490,9 +496,6 @@ export default class Spectastiq extends HTMLElement {
           timelineState.initialPinchXLeftZeroOne = 0;
           timelineState.initialPinchXRightZeroOne = 1;
           timelineState.currentAction = null;
-          if (audioState.playing) {
-            await audioState.pause(0);
-          }
           audioState.followPlayhead = false;
           this.persistentSpectrogramState = persistentSpectrogramState;
           this.terminateExistingState = unloadAudio;
