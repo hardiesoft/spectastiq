@@ -459,7 +459,16 @@ async function renderArrayBuffer(
     const clipPercent = 1 - (cClip / (FFT_WIDTH / 2));
     state.actualSampleRate = 48000 * clipPercent;
     state.cropAmountTop = 1 - clipPercent;
+    state.clip = clip;
 
+
+    // Maybe we need to calculate the min/maxes here after cropping anyway?
+    // We remove values at the top of the clip less than 10,000
+    console.log("Dynamic range", state.min, state.max);
+    // TODO: Crop off noise floor?
+  }
+  if (!state.max) {
+    const sliceLen = FFT_WIDTH / 2;
     let min = Number.MAX_VALUE;
     let max = 0;
     for (
@@ -468,7 +477,7 @@ async function renderArrayBuffer(
       j += sliceLen
     ) {
       const slice = state.sharedOutputData.slice(j, j + sliceLen);
-      for (let i = 0; i < clip; i++) {
+      for (let i = 0; i < state.clip; i++) {
         const val = slice[i];
         min = Math.min(min, val);
         max = Math.max(max, val);
@@ -476,15 +485,11 @@ async function renderArrayBuffer(
     }
     state.min = min;
     state.max = max;
-    // Maybe we need to calculate the min/maxes here after cropping anyway?
-    // We remove values at the top of the clip less than 10,000
-    // console.log("Dynamic range", state.min, state.max);
-    // TODO: Crop off noise floor?
   }
 
   // TODO: Once we know how we're cropping etc, work out min/max values and translate that to a volume scale.
   //  Also allow doing this *again* for a zoomed region of interest.
-
+  console.log("Max", state.max);
   // noinspection JSSuspiciousNameCombination
   const nextImageData = {
     startZeroOne,
