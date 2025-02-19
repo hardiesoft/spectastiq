@@ -461,13 +461,10 @@ async function renderArrayBuffer(
     state.cropAmountTop = 1 - clipPercent;
     state.clip = clip;
 
-
-    // Maybe we need to calculate the min/maxes here after cropping anyway?
-    // We remove values at the top of the clip less than 10,000
-    console.log("Dynamic range", state.min, state.max);
-
   }
   if (!state.max) {
+    // Maybe we need to calculate the min/maxes here after cropping anyway?
+    // We remove values at the top of the clip less than 10,000
     const sliceLen = FFT_WIDTH / 2;
     let min = Number.MAX_VALUE;
     let max = 0;
@@ -481,7 +478,8 @@ async function renderArrayBuffer(
       const slice = state.sharedOutputData.slice(j, j + sliceLen);
       // console.log("noise floor", (12 /1024) * state.actualSampleRate);
       // TODO: Work out actual frequency cutoff of around 500hz
-      for (let i = 12; i < state.clip; i++) {
+      const m = Math.min(slice.length, state.clip);
+      for (let i = 12; i < m; i++) {
         const val = slice[i];
         min = Math.min(min, val);
         max = Math.max(max, val);
@@ -490,10 +488,8 @@ async function renderArrayBuffer(
     state.min = min;
     state.max = max;
   }
-
   // TODO: Once we know how we're cropping etc, work out min/max values and translate that to a volume scale.
   //  Also allow doing this *again* for a zoomed region of interest.
-  console.log("Max", state.max);
   // noinspection JSSuspiciousNameCombination
   const nextImageData = {
     startZeroOne,
