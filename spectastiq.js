@@ -1077,16 +1077,18 @@ export default class Spectastiq extends HTMLElement {
     overlayCanvas.addEventListener("custom-region-change", (e) => {
       let { left, right, top, bottom } = e.detail;
       left = Math.max(0, left);
-      right = Math.min(overlayCanvas.width * devicePixelRatio, right);
       top = Math.max(0, top);
-      bottom = Math.min(overlayCanvas.height * devicePixelRatio, bottom);
+      const x = left * devicePixelRatio;
+      const y = top * devicePixelRatio;
+      const width = Math.min((right - left) * devicePixelRatio, overlayCanvas.width - x);
+      const height = Math.min((bottom - top) * devicePixelRatio, overlayCanvas.height - y);
       clearOverlay();
       this.drawFrequencyScale && redrawFrequencyScaleOverlay(timelineState, this.actualSampleRate);
       const ctx = overlayCanvas.getContext("2d");
       ctx.setLineDash([5 * devicePixelRatio, 5 * devicePixelRatio]);
       ctx.lineWidth = 1 * devicePixelRatio;
       ctx.strokeStyle = "white";
-      ctx.strokeRect(left * devicePixelRatio, top * devicePixelRatio, (right - left) * devicePixelRatio, (bottom - top) * devicePixelRatio);
+      ctx.strokeRect(x, y, width, height);
     });
     overlayCanvas.addEventListener("custom-region-create", (e) => {
       clearOverlay();
@@ -1332,6 +1334,10 @@ export default class Spectastiq extends HTMLElement {
         clearTimeout(this.sharedState.interactionTimeout);
         this.timelineElements.container.classList.add("disabled");
         this.sharedState.interactionTimeout = setTimeout(() => {
+          // TODO: We only want to invalidate the caches if the *backing* size of the spectrogram has changed,
+          //  and it needed to be re-rendered.  Otherwise just draw what we have again with no delay.
+          //  Worth noting though that our webgl canvases *do* need to be resized at some point, and at that point
+          //  we need to re-upload the textures, which can cause a hitch
           if (didChangeWidth) {
             this.invalidateCanvasCaches && this.invalidateCanvasCaches();
             this.renderRange &&

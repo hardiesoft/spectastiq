@@ -1,6 +1,6 @@
 {
   "name": "spectastiq",
-  "version": "0.9.11",
+  "version": "0.9.12",
   "description": "An interactive spectrogram renderer and audio player, optimised for touch devices.",
   "main": "spectastiq.js",
   "module": "spectastiq.js",
