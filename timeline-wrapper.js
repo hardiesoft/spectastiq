@@ -183,114 +183,115 @@ const onPointerMove = (canvas, state, sharedState) => {
   if (numPointers <= 2) {
     const pointers = Object.values(state.pointers);
     const canvasWidth = canvas.width / devicePixelRatio;
-    if (!state.regionCreationMode) {
-      let pinchXLeftZeroOne;
-      let pinchXRightZeroOne;
-      if (numPointers === 2) {
-        if (!state.panStarted || state.pinchStarted) {
-          const x0 = pointers[0].x;
-          const x1 = pointers[1].x;
-          pinchXLeftZeroOne = Math.max(0, Math.min(x0, x1) / canvasWidth);
-          pinchXRightZeroOne = Math.min(1, Math.max(x0, x1) / canvasWidth);
-          if (!state.pinchStarted) {
-            state.pinchStarted = true;
-            if (!sharedState.interacting) {
-              canvas.dispatchEvent(
-                new Event("interaction-begin")
-              );
-            }
-            const range = state.right - state.left;
-            state.initialPinchXLeftZeroOne = state.left + range * pinchXLeftZeroOne;
-            state.initialPinchXRightZeroOne =
-              state.left + range * pinchXRightZeroOne;
-          }
-        } else {
-          state.pinchStarted = false;
-          state.panStarted = false;
-        }
-      } else if (numPointers === 1) {
+
+    let pinchXLeftZeroOne;
+    let pinchXRightZeroOne;
+    if (numPointers === 2) {
+      if (!state.panStarted || state.pinchStarted) {
+        const x0 = pointers[0].x;
+        const x1 = pointers[1].x;
+        pinchXLeftZeroOne = Math.max(0, Math.min(x0, x1) / canvasWidth);
+        pinchXRightZeroOne = Math.min(1, Math.max(x0, x1) / canvasWidth);
         if (!state.pinchStarted) {
-          let range = state.right - state.left;
-          if (state.panStarted) {
-            range = state.initialPanRange;
+          state.pinchStarted = true;
+          if (!sharedState.interacting) {
+            canvas.dispatchEvent(new Event("interaction-begin"));
           }
-          const x0 = pointers[0].x / canvasWidth;
-          pinchXLeftZeroOne = Math.max(0, x0);
-          pinchXRightZeroOne = pinchXLeftZeroOne + range;
-          if (!state.pinchStarted && !state.panStarted && !state.scrubGlobalStarted && !state.scrubLocalStarted) {
-            state.panStarted = true;
-            if (!sharedState.interacting) {
-              canvas.dispatchEvent(
-                new Event("interaction-begin")
-              );
-            }
-            state.initialPinchXLeftZeroOne = Math.max(
-              0,
-              state.left + range * pinchXLeftZeroOne
-            );
-            state.initialPinchXRightZeroOne = Math.min(
-              1,
-              state.left + range * pinchXRightZeroOne
-            );
-            state.startPanXZeroOne = state.left;
-            state.initialPanRange = state.right - state.left;
-          } else if (state.scrubLocalStarted || state.scrubGlobalStarted) {
-            if (!sharedState.interacting) {
-              canvas.dispatchEvent(
-                new Event("interaction-begin")
-              );
-            }
-            const progress = (pointers[0].x - state.scrubDragOffsetX) / canvasWidth;
-            if (state.scrubLocalStarted) {
-              state.dragLocalPlayhead(progress);
-            } else if (state.scrubGlobalStarted) {
-              state.dragGlobalPlayhead(progress);
-            }
-          } else if (state.panStarted) {
-            const localLeft = Math.max(
-              0,
-              state.startPanXZeroOne + range * pinchXLeftZeroOne
-            );
-            state.left = Math.min(1 - state.initialPanRange, Math.max(0, state.startPanXZeroOne - (localLeft - state.initialPinchXLeftZeroOne)));
-            state.right = state.left + state.initialPanRange;
-            canvas.dispatchEvent(
-              new CustomEvent("range-change", {
-                detail: {
-                  startZeroOne: state.left,
-                  endZeroOne: state.right,
-                  initialRender: false,
-                },
-              })
-            );
-          }
-        } else {
-          state.pinchStarted = false;
-          state.panStarted = false;
+          const range = state.right - state.left;
+          state.initialPinchXLeftZeroOne =
+            state.left + range * pinchXLeftZeroOne;
+          state.initialPinchXRightZeroOne =
+            state.left + range * pinchXRightZeroOne;
         }
+      } else {
+        state.pinchStarted = false;
+        state.panStarted = false;
       }
-      if (sharedState.interacting && state.pinchStarted && numPointers < 2 || state.panStarted && numPointers < 1) {
-        canvas.dispatchEvent(
-          new Event("interaction-end")
-        );
+    } else if (numPointers === 1) {
+      if (!state.pinchStarted) {
+        let range = state.right - state.left;
+        if (state.panStarted) {
+          range = state.initialPanRange;
+        }
+        const x0 = pointers[0].x / canvasWidth;
+        pinchXLeftZeroOne = Math.max(0, x0);
+        pinchXRightZeroOne = pinchXLeftZeroOne + range;
+        if (
+          !state.pinchStarted &&
+          !state.panStarted &&
+          !state.scrubGlobalStarted &&
+          !state.scrubLocalStarted
+        ) {
+          state.panStarted = true;
+          if (!sharedState.interacting) {
+            canvas.dispatchEvent(new Event("interaction-begin"));
+          }
+          state.initialPinchXLeftZeroOne = Math.max(
+            0,
+            state.left + range * pinchXLeftZeroOne
+          );
+          state.initialPinchXRightZeroOne = Math.min(
+            1,
+            state.left + range * pinchXRightZeroOne
+          );
+          state.startPanXZeroOne = state.left;
+          state.initialPanRange = state.right - state.left;
+        } else if (state.scrubLocalStarted || state.scrubGlobalStarted) {
+          if (!sharedState.interacting) {
+            canvas.dispatchEvent(new Event("interaction-begin"));
+          }
+          const progress =
+            (pointers[0].x - state.scrubDragOffsetX) / canvasWidth;
+          if (state.scrubLocalStarted) {
+            state.dragLocalPlayhead(progress);
+          } else if (state.scrubGlobalStarted) {
+            state.dragGlobalPlayhead(progress);
+          }
+        } else if (state.panStarted) {
+          const localLeft = Math.max(
+            0,
+            state.startPanXZeroOne + range * pinchXLeftZeroOne
+          );
+          state.left = Math.min(
+            1 - state.initialPanRange,
+            Math.max(
+              0,
+              state.startPanXZeroOne -
+                (localLeft - state.initialPinchXLeftZeroOne)
+            )
+          );
+          state.right = state.left + state.initialPanRange;
+          canvas.dispatchEvent(
+            new CustomEvent("range-change", {
+              detail: {
+                startZeroOne: state.left,
+                endZeroOne: state.right,
+                initialRender: false,
+              },
+            })
+          );
+        }
+      } else {
+        state.pinchStarted = false;
+        state.panStarted = false;
       }
-      // TODO: We may want to allow pinching in to less than 100%, and then bounce back out.
-      if (state.pinchStarted) {
-        updatePinch(
-          pinchXLeftZeroOne,
-          pinchXRightZeroOne,
-          state.initialPinchXLeftZeroOne,
-          state.initialPinchXRightZeroOne,
-          state,
-          canvas
-        );
-      }
-    } else {
-      // Do region creation stuff - redraw overlay?
-      if (!sharedState.interacting) {
-        canvas.dispatchEvent(
-          new Event("interaction-begin")
-        );
-      }
+    }
+    if (
+      (sharedState.interacting && state.pinchStarted && numPointers < 2) ||
+      (state.panStarted && numPointers < 1)
+    ) {
+      canvas.dispatchEvent(new Event("interaction-end"));
+    }
+    // TODO: We may want to allow pinching in to less than 100%, and then bounce back out.
+    if (state.pinchStarted) {
+      updatePinch(
+        pinchXLeftZeroOne,
+        pinchXRightZeroOne,
+        state.initialPinchXLeftZeroOne,
+        state.initialPinchXRightZeroOne,
+        state,
+        canvas
+      );
     }
   }
 };
@@ -378,24 +379,34 @@ export const drawTimelineUI =
     const halfPx = 0.5 * devicePixelRatio;
     const twoPx = 2 * devicePixelRatio;
     const threePx = 3 * devicePixelRatio;
-    const handleWidth = (end - start) - onePx;
+    const handleWidth = end - start - onePx;
     const minHandleWidth = 44 * devicePixelRatio;
-    const handleIsNarrow = handleWidth < minHandleWidth
+    const handleIsNarrow = handleWidth < minHandleWidth;
     const unselectedHandleColor = isDarkTheme ? "#b1b2b5" : "#595959";
     const selectedHandleColor = isDarkTheme ? "#cccdd1" : "#333333";
     const resizeHandleAt = (x, color, cX) => {
-      const y = (height / 2) - handleHeight / 2;
+      const y = height / 2 - handleHeight / 2;
       const halfWidth = resizeHandleWidth / 2;
       ctx.fillStyle = color;
       ctx.beginPath();
       const atStart = x < halfWidth;
 
-      const atEnd = (x + resizeHandleWidth) > width - halfWidth;
+      const atEnd = x + resizeHandleWidth > width - halfWidth;
       if (atStart || atEnd) {
         if (atStart) {
-          ctx.roundRect(x, y, resizeHandleWidth, handleHeight, [cX, halfWidth, halfWidth, cX]);
+          ctx.roundRect(x, y, resizeHandleWidth, handleHeight, [
+            cX,
+            halfWidth,
+            halfWidth,
+            cX,
+          ]);
         } else {
-          ctx.roundRect(x, y, resizeHandleWidth, handleHeight, [halfWidth, cX, cX, halfWidth]);
+          ctx.roundRect(x, y, resizeHandleWidth, handleHeight, [
+            halfWidth,
+            cX,
+            cX,
+            halfWidth,
+          ]);
         }
         ctx.roundRect(x, y, resizeHandleWidth, handleHeight, halfWidth);
       } else {
@@ -404,16 +415,35 @@ export const drawTimelineUI =
       ctx.fill();
       ctx.fillStyle = isDarkTheme ? "#666" : "#ccc";
       ctx.beginPath();
-      const circleX = (x + halfWidth) - (1.5 * devicePixelRatio);
+      const circleX = x + halfWidth - 1.5 * devicePixelRatio;
       const circleC = 3 * devicePixelRatio;
-      ctx.roundRect(circleX, y + (4.5 * devicePixelRatio), circleC, circleC, circleC * 0.5);
-      ctx.roundRect(circleX, y + (10.5 * devicePixelRatio), circleC, circleC, circleC * 0.5);
-      ctx.roundRect(circleX, y + (16.5 * devicePixelRatio), circleC, circleC, circleC * 0.5);
+      ctx.roundRect(
+        circleX,
+        y + 4.5 * devicePixelRatio,
+        circleC,
+        circleC,
+        circleC * 0.5
+      );
+      ctx.roundRect(
+        circleX,
+        y + 10.5 * devicePixelRatio,
+        circleC,
+        circleC,
+        circleC * 0.5
+      );
+      ctx.roundRect(
+        circleX,
+        y + 16.5 * devicePixelRatio,
+        circleC,
+        circleC,
+        circleC * 0.5
+      );
       ctx.fill();
     };
 
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = currentAction !== null ? `rgba(0, 0, 0, 0.25)` : "rgba(0, 0, 0, 0.2)";
+    ctx.fillStyle =
+      currentAction !== null ? `rgba(0, 0, 0, 0.25)` : "rgba(0, 0, 0, 0.2)";
     ctx.beginPath();
     ctx.rect(0, 0, width, height);
 
@@ -423,31 +453,77 @@ export const drawTimelineUI =
     const drawPanHandlePath = (handleIsNarrow, selected) => {
       if (!handleIsNarrow) {
         if (!selected) {
-          ctx.roundRect(Math.max(halfPx, start), halfPx, handleWidth, height - onePx, threePx);
+          ctx.roundRect(
+            Math.max(halfPx, start),
+            halfPx,
+            handleWidth,
+            height - onePx,
+            threePx
+          );
         } else {
-          ctx.roundRect(start + onePx, onePx, handleWidth - onePx, height - twoPx, threePx);
+          ctx.roundRect(
+            start + onePx,
+            onePx,
+            handleWidth - onePx,
+            height - twoPx,
+            threePx
+          );
         }
       } else {
         // Something fancy, a kind of funnel from the wide grabby bit of the handle to the width that shows how wide
         // the current selection range actually is.
         const left = Math.max(halfPx, start);
-        const leftWideExtreme = Math.min(width - minHandleWidth - halfPx, Math.max(halfPx, left - (minHandleWidth / 2) + (handleWidth / 2)));
-        const rightWideExtreme = leftWideExtreme + minHandleWidth;//(minHandleWidth / 2) - (handleWidth / 2);
+        const leftWideExtreme = Math.min(
+          width - minHandleWidth - halfPx,
+          Math.max(halfPx, left - minHandleWidth / 2 + handleWidth / 2)
+        );
+        const rightWideExtreme = leftWideExtreme + minHandleWidth; //(minHandleWidth / 2) - (handleWidth / 2);
         const top = halfPx;
         const bottom = height - onePx;
 
         ctx.moveTo(left, top);
         ctx.lineTo(left + handleWidth - threePx, halfPx);
-        ctx.arcTo(left + handleWidth, halfPx, left + handleWidth, halfPx + threePx, threePx);
-        ctx.bezierCurveTo(left + handleWidth, vStep2, rightWideExtreme, vStep1, rightWideExtreme, bottom - threePx);
-        ctx.arcTo(rightWideExtreme, bottom, rightWideExtreme - threePx, bottom, threePx);
+        ctx.arcTo(
+          left + handleWidth,
+          halfPx,
+          left + handleWidth,
+          halfPx + threePx,
+          threePx
+        );
+        ctx.bezierCurveTo(
+          left + handleWidth,
+          vStep2,
+          rightWideExtreme,
+          vStep1,
+          rightWideExtreme,
+          bottom - threePx
+        );
+        ctx.arcTo(
+          rightWideExtreme,
+          bottom,
+          rightWideExtreme - threePx,
+          bottom,
+          threePx
+        );
         ctx.lineTo(leftWideExtreme + threePx, bottom);
-        ctx.arcTo(leftWideExtreme, bottom, leftWideExtreme, bottom - threePx, threePx);
-        ctx.bezierCurveTo(leftWideExtreme, vStep1, left, vStep2, left, top + threePx);
+        ctx.arcTo(
+          leftWideExtreme,
+          bottom,
+          leftWideExtreme,
+          bottom - threePx,
+          threePx
+        );
+        ctx.bezierCurveTo(
+          leftWideExtreme,
+          vStep1,
+          left,
+          vStep2,
+          left,
+          top + threePx
+        );
         ctx.arcTo(left, top, left + threePx, top, threePx);
       }
-    }
-
+    };
 
     // Draw track and pan handle cutout
     drawPanHandlePath(handleIsNarrow, false);
@@ -456,11 +532,11 @@ export const drawTimelineUI =
     // Stroke pan handle
     ctx.beginPath();
     if (currentAction === "pan") {
-      ctx.strokeStyle = selectedHandleColor;//`rgba(${c}, ${c}, ${c}, 1)`;
+      ctx.strokeStyle = selectedHandleColor; //`rgba(${c}, ${c}, ${c}, 1)`;
       ctx.lineWidth = twoPx;
       drawPanHandlePath(handleIsNarrow, true);
     } else {
-      ctx.strokeStyle = unselectedHandleColor;//`rgba(${c}, ${c}, ${c}, 0.75)`;
+      ctx.strokeStyle = unselectedHandleColor; //`rgba(${c}, ${c}, ${c}, 0.75)`;
       ctx.lineWidth = onePx;
       drawPanHandlePath(handleIsNarrow, false);
     }
@@ -469,22 +545,41 @@ export const drawTimelineUI =
     // Draw resize handles
     const resizeHandleWidth = 8 * devicePixelRatio;
     const handleHeight = 24 * devicePixelRatio;
-    const leftHandleColour = currentAction === "resize-left" || state.overLeftHandle ? selectedHandleColor : unselectedHandleColor;
-    const rightHandleColour = currentAction === "resize-right" || state.overRightHandle ? selectedHandleColor : unselectedHandleColor;
+    const leftHandleColour =
+      currentAction === "resize-left" || state.overLeftHandle
+        ? selectedHandleColor
+        : unselectedHandleColor;
+    const rightHandleColour =
+      currentAction === "resize-right" || state.overRightHandle
+        ? selectedHandleColor
+        : unselectedHandleColor;
     const halfWidth = resizeHandleWidth / 2;
     let leftX;
-    const leftC = Math.min(halfWidth, halfWidth - Math.min(halfWidth, halfWidth - start));
-    let rightC = Math.min(halfWidth, halfWidth - Math.min(halfWidth, halfWidth - (width - end)));
+    const leftC = Math.min(
+      halfWidth,
+      halfWidth - Math.min(halfWidth, halfWidth - start)
+    );
+    let rightC = Math.min(
+      halfWidth,
+      halfWidth - Math.min(halfWidth, halfWidth - (width - end))
+    );
     if (handleWidth > minHandleWidth * 2) {
       leftX = Math.max(0, start - resizeHandleWidth * 0.5);
     } else {
-      leftX = Math.max(0, start - resizeHandleWidth * 0.5) + (handleWidth / 2 - minHandleWidth);
+      leftX =
+        Math.max(0, start - resizeHandleWidth * 0.5) +
+        (handleWidth / 2 - minHandleWidth);
     }
     let rightX;
     if (handleWidth > minHandleWidth * 2) {
-      rightX = Math.min(width - resizeHandleWidth, (end - resizeHandleWidth * 0.5)) - onePx;
+      rightX =
+        Math.min(width - resizeHandleWidth, end - resizeHandleWidth * 0.5) -
+        onePx;
     } else {
-      rightX = Math.min(width - resizeHandleWidth, (end - resizeHandleWidth * 0.5) - (handleWidth / 2 - minHandleWidth));
+      rightX = Math.min(
+        width - resizeHandleWidth,
+        end - resizeHandleWidth * 0.5 - (handleWidth / 2 - minHandleWidth)
+      );
     }
     // Draw left resize handle
     resizeHandleAt(leftX, leftHandleColour, leftC);
@@ -511,7 +606,10 @@ const startHandleResize = (e, timelineElements, state, xOffset, action) => {
 const endHandleResize = (e, timelineElements, state) => {
   if (e.isPrimary) {
     const target = e.target;
-    if (state.currentAction === "resize-left" || state.currentAction === "resize-right") {
+    if (
+      state.currentAction === "resize-left" ||
+      state.currentAction === "resize-right"
+    ) {
       target.releasePointerCapture(e.pointerId);
       state.currentAction = null;
       timelineElements.overlayCanvas.dispatchEvent(
@@ -522,7 +620,9 @@ const endHandleResize = (e, timelineElements, state) => {
 };
 const dragResize = (e, timelineElements, state, xOffsetZeroOne) => {
   if (e.isPrimary && e.target.hasPointerCapture(e.pointerId)) {
-    const thisOffsetX = xOffsetZeroOne - (state.handleDragOffsetX - state.handleStartOffsetXZeroOne);
+    const thisOffsetX =
+      xOffsetZeroOne -
+      (state.handleDragOffsetX - state.handleStartOffsetXZeroOne);
     const minRange = 1 / getMaxXZoom(timelineElements.canvas.width, state);
     if (state.currentAction === "resize-left") {
       state.left = Math.max(0, Math.min(state.right, thisOffsetX));
@@ -548,11 +648,7 @@ const dragResize = (e, timelineElements, state, xOffsetZeroOne) => {
   }
 };
 
-export const initTimeline = (
-  root,
-  sharedState,
-  timelineElements,
-) => {
+export const initTimeline = (root, sharedState, timelineElements) => {
   const state = {
     currentAction: null,
     handleStartOffsetXZeroOne: undefined,
@@ -571,30 +667,42 @@ export const initTimeline = (
     numAudioSamples: 0,
     drawTimelineUI,
     pointers: {},
-    regionCreationMode: false,
+    customInteractionMode: false,
     overLeftHandle: false,
     overRightHandle: false,
     overPanHandle: false,
     overSeekTrack: false,
   };
 
-  state.drawTimelineUI = drawTimelineUI(timelineElements, state)
+  state.drawTimelineUI = drawTimelineUI(timelineElements, state);
 
   const hitTestTimeline = (xOffsetZeroOne) => {
     //console.log("hitTestTimeline", xOffsetZeroOne);
     const resizeHandleWidthCssPx = 44;
-    const handleWidthZeroOne = resizeHandleWidthCssPx / (timelineElements.canvas.width / devicePixelRatio);
+    const handleWidthZeroOne =
+      resizeHandleWidthCssPx /
+      (timelineElements.canvas.width / devicePixelRatio);
 
-    let leftResizeLeft = Math.max(0, state.left - (handleWidthZeroOne * 0.5));
+    let leftResizeLeft = Math.max(0, state.left - handleWidthZeroOne * 0.5);
     let leftResizeRight = leftResizeLeft + handleWidthZeroOne;
-    let rightResizeRight = Math.min(1, state.right + (handleWidthZeroOne * 0.5));
+    let rightResizeRight = Math.min(1, state.right + handleWidthZeroOne * 0.5);
     let rightResizeLeft = rightResizeRight - handleWidthZeroOne;
 
     // TODO: Correctly handle if the pan handle is very narrow at either extreme of the timeline.
     const panHandleWidth = rightResizeLeft - leftResizeRight;
     if (panHandleWidth < handleWidthZeroOne) {
-      leftResizeLeft = Math.max(0, state.left - (handleWidthZeroOne * 0.5) - (handleWidthZeroOne - panHandleWidth) * 0.5);
-      rightResizeRight = Math.min(1, state.right + (handleWidthZeroOne * 0.5) + (handleWidthZeroOne - panHandleWidth) * 0.5);
+      leftResizeLeft = Math.max(
+        0,
+        state.left -
+          handleWidthZeroOne * 0.5 -
+          (handleWidthZeroOne - panHandleWidth) * 0.5
+      );
+      rightResizeRight = Math.min(
+        1,
+        state.right +
+          handleWidthZeroOne * 0.5 +
+          (handleWidthZeroOne - panHandleWidth) * 0.5
+      );
     }
     rightResizeLeft = rightResizeRight - handleWidthZeroOne;
     if (leftResizeLeft === 0 && rightResizeLeft < handleWidthZeroOne) {
@@ -612,16 +720,18 @@ export const initTimeline = (
     // ctx.strokeRect(rightResizeLeft * ctx.canvas.width, 0, (rightResizeRight - rightResizeLeft) * ctx.canvas.width, ctx.canvas.height);
     // ctx.restore();
 
-    const inResizeHandleLeft = xOffsetZeroOne >= leftResizeLeft && xOffsetZeroOne <= leftResizeRight;
-    const inResizeHandleRight = xOffsetZeroOne >= rightResizeLeft && xOffsetZeroOne <= rightResizeRight;
-    const inMainPanHandle = xOffsetZeroOne >= leftResizeLeft && xOffsetZeroOne <= rightResizeRight;
+    const inResizeHandleLeft =
+      xOffsetZeroOne >= leftResizeLeft && xOffsetZeroOne <= leftResizeRight;
+    const inResizeHandleRight =
+      xOffsetZeroOne >= rightResizeLeft && xOffsetZeroOne <= rightResizeRight;
+    const inMainPanHandle =
+      xOffsetZeroOne >= leftResizeLeft && xOffsetZeroOne <= rightResizeRight;
     const inSeekTrack = !inMainPanHandle;
-    const targetChanged = (
+    const targetChanged =
       state.overLeftHandle !== inResizeHandleLeft ||
       state.overRightHandle !== inResizeHandleRight ||
       state.overPanHandle !== inMainPanHandle ||
-      state.overSeekTrack !== inSeekTrack
-    );
+      state.overSeekTrack !== inSeekTrack;
     state.overLeftHandle = inResizeHandleLeft;
     state.overRightHandle = inResizeHandleRight;
     state.overPanHandle = inMainPanHandle;
@@ -632,7 +742,7 @@ export const initTimeline = (
       inSeekTrack,
       targetChanged,
     };
-  }
+  };
 
   timelineElements.timelineUICanvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
@@ -642,7 +752,8 @@ export const initTimeline = (
       // Only response to left mouse clicks
       return;
     }
-    const xOffsetZeroOne = e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
+    const xOffsetZeroOne =
+      e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
     const {
       inResizeHandleLeft,
       inResizeHandleRight,
@@ -659,11 +770,23 @@ export const initTimeline = (
       }
     } else {
       if (inResizeHandleLeft) {
-        startHandleResize(e, timelineElements, state, xOffsetZeroOne, "resize-left");
+        startHandleResize(
+          e,
+          timelineElements,
+          state,
+          xOffsetZeroOne,
+          "resize-left"
+        );
       } else if (inResizeHandleRight) {
-        startHandleResize(e, timelineElements, state, xOffsetZeroOne, "resize-right");
+        startHandleResize(
+          e,
+          timelineElements,
+          state,
+          xOffsetZeroOne,
+          "resize-right"
+        );
       } else {
-        startHandleDrag(e, timelineElements, state, xOffsetZeroOne)
+        startHandleDrag(e, timelineElements, state, xOffsetZeroOne);
       }
       redrawnUI = true;
     }
@@ -703,7 +826,8 @@ export const initTimeline = (
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
-    const xOffsetZeroOne = e.offsetX / (timelineElements.timelineUICanvas.width / devicePixelRatio);
+    const xOffsetZeroOne =
+      e.offsetX / (timelineElements.timelineUICanvas.width / devicePixelRatio);
     if (state.currentAction !== null) {
       switch (state.currentAction) {
         case "pan":
@@ -714,7 +838,7 @@ export const initTimeline = (
           dragResize(e, timelineElements, state, xOffsetZeroOne);
           break;
       }
-    } else if (e.pressure === 0 && e.pointerType === 'mouse') {
+    } else if (e.pressure === 0 && e.pointerType === "mouse") {
       const {
         inResizeHandleLeft,
         inResizeHandleRight,
@@ -733,8 +857,16 @@ export const initTimeline = (
         }
         timelineElements.timelineUICanvas.classList.add("grab");
       } else {
-        if (timelineElements.timelineUICanvas.classList.contains("grab") || timelineElements.timelineUICanvas.classList.contains("resize") || timelineElements.timelineUICanvas.classList.contains("grabbing")) {
-          timelineElements.timelineUICanvas.classList.remove("grab", "resize", "grabbing");
+        if (
+          timelineElements.timelineUICanvas.classList.contains("grab") ||
+          timelineElements.timelineUICanvas.classList.contains("resize") ||
+          timelineElements.timelineUICanvas.classList.contains("grabbing")
+        ) {
+          timelineElements.timelineUICanvas.classList.remove(
+            "grab",
+            "resize",
+            "grabbing"
+          );
         }
       }
       if (targetChanged) {
@@ -748,33 +880,44 @@ export const initTimeline = (
 
   const hitTestScrubHandles = (x, y) => {
     const numPointers = Object.keys(state.pointers).length;
-    const atBottom = y > (timelineElements.canvas.height / devicePixelRatio) - 44;
+    const atBottom = y > timelineElements.canvas.height / devicePixelRatio - 44;
     const atTop = y < 44;
     let inLocalPlaybackScrubberHandle = false;
     let inGlobalPlaybackScrubberHandle = false;
     if (numPointers < 2 && (atTop || atBottom)) {
       const audioProgressZeroOne = state.audioState.audioProgressZeroOne;
       const minHandleWidth = 44;
-      const width = timelineElements.mainPlayheadCanvas.width / devicePixelRatio;
-      if (atTop && audioProgressZeroOne >= state.left && audioProgressZeroOne <= state.right) {
-        const localProgress = (audioProgressZeroOne - state.left) / (state.right - state.left);
-        const localPlaybackLeft = Math.max(0, (localProgress * width) - minHandleWidth / 2);
+      const width =
+        timelineElements.mainPlayheadCanvas.width / devicePixelRatio;
+      if (
+        atTop &&
+        audioProgressZeroOne >= state.left &&
+        audioProgressZeroOne <= state.right
+      ) {
+        const localProgress =
+          (audioProgressZeroOne - state.left) / (state.right - state.left);
+        const localPlaybackLeft = Math.max(
+          0,
+          localProgress * width - minHandleWidth / 2
+        );
         const localPlaybackRight = localPlaybackLeft + minHandleWidth;
         if (x >= localPlaybackLeft && x <= localPlaybackRight) {
           inLocalPlaybackScrubberHandle = true;
         }
       } else if (atBottom) {
-        const globalPlaybackLeft = Math.max(0, (audioProgressZeroOne * width) - minHandleWidth / 2);
+        const globalPlaybackLeft = Math.max(
+          0,
+          audioProgressZeroOne * width - minHandleWidth / 2
+        );
         const globalPlaybackRight = globalPlaybackLeft + minHandleWidth;
         if (x >= globalPlaybackLeft && x <= globalPlaybackRight) {
           inGlobalPlaybackScrubberHandle = true;
         }
       }
     }
-    const targetChanged = (
+    const targetChanged =
       state.inLocalPlaybackScrubberHandle !== inLocalPlaybackScrubberHandle ||
-      state.inGlobalPlaybackScrubberHandle !== inGlobalPlaybackScrubberHandle
-    );
+      state.inGlobalPlaybackScrubberHandle !== inGlobalPlaybackScrubberHandle;
     state.inLocalPlaybackScrubberHandle = inLocalPlaybackScrubberHandle;
     state.inGlobalPlaybackScrubberHandle = inGlobalPlaybackScrubberHandle;
 
@@ -782,7 +925,7 @@ export const initTimeline = (
       inLocalPlaybackScrubberHandle,
       inGlobalPlaybackScrubberHandle,
       targetChanged,
-    }
+    };
   };
 
   timelineElements.timelineUICanvas.addEventListener("pointercancel", (e) => {
@@ -803,7 +946,8 @@ export const initTimeline = (
   });
   timelineElements.overlayCanvas.addEventListener("wheel", (e) => {
     e.preventDefault();
-    const xOffset = e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
+    const xOffset =
+      e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
     const dY = e.deltaY;
     let amount;
     if (Math.floor(dY) === dY) {
@@ -813,11 +957,12 @@ export const initTimeline = (
       // This is likely a trackpad pinch event (with real number values)
       amount = -e.deltaY * 0.01;
     }
-    updateZoom(xOffset, amount, state, sharedState, timelineElements)
+    updateZoom(xOffset, amount, state, sharedState, timelineElements);
   });
   timelineElements.timelineUICanvas.addEventListener("wheel", (e) => {
     e.preventDefault();
-    const xOffset = e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
+    const xOffset =
+      e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
     const dY = e.deltaY;
     let amount;
     if (Math.floor(dY) === dY) {
@@ -833,39 +978,76 @@ export const initTimeline = (
     }
   });
   timelineElements.overlayCanvas.addEventListener("pointerdown", (e) => {
-    if (e.pointerType === "touch" || (e.pointerType === "mouse" && e.button !== -1) || e.pressure > 0) {
+    if (
+      e.pointerType === "touch" ||
+      (e.pointerType === "mouse" && e.button !== -1) ||
+      e.pressure > 0
+    ) {
       e.preventDefault();
       let numPointers = Object.keys(state.pointers).length;
       if (numPointers < 2) {
-        state.pointers[e.pointerId] = {x: e.offsetX, y: e.offsetY, time: performance.now()};
+        state.pointers[e.pointerId] = {
+          x: e.offsetX,
+          y: e.offsetY,
+          time: performance.now(),
+        };
         timelineElements.overlayCanvas.setPointerCapture(e.pointerId);
       }
-      const {
-        inLocalPlaybackScrubberHandle, inGlobalPlaybackScrubberHandle
-      } = hitTestScrubHandles(e.offsetX, e.offsetY);
+      const { inLocalPlaybackScrubberHandle, inGlobalPlaybackScrubberHandle } =
+        hitTestScrubHandles(e.offsetX, e.offsetY);
       state.interactionStartX = e.offsetX;
       state.interactionStartY = e.offsetY;
-      const width = timelineElements.mainPlayheadCanvas.width / devicePixelRatio;
-      if (inGlobalPlaybackScrubberHandle) {
-        // Drag global playtime scrubber
-        state.scrubGlobalStarted = true;
+      const width =
+        timelineElements.mainPlayheadCanvas.width / devicePixelRatio;
+      if (state.customInteractionMode) {
+        root.dispatchEvent(
+          new CustomEvent("custom-interaction-start", {
+            bubbles: false,
+            composed: true,
+            cancelable: false,
+            detail: {
+              offsetX: e.offsetX,
+              offsetY: e.offsetY,
+              container: timelineElements.overlayCanvas,
+            },
+          })
+        );
+      }
+      if (state.customInteractionMode && state.inCustomInteraction) {
+        // Don't start drags etc.
+      } else {
+        if (inGlobalPlaybackScrubberHandle) {
+          // Drag global playtime scrubber
+          state.scrubGlobalStarted = true;
 
-        state.scrubDragOffsetX = e.offsetX - (state.audioState.audioProgressZeroOne * width);
-        state.startPlayheadDrag();
-        if (e.pointerType === "mouse") {
-          if (!timelineElements.spectrogramContainer.classList.contains("dragging")) {
-            timelineElements.spectrogramContainer.classList.add("dragging");
+          state.scrubDragOffsetX =
+            e.offsetX - state.audioState.audioProgressZeroOne * width;
+          state.startPlayheadDrag();
+          if (e.pointerType === "mouse") {
+            if (
+              !timelineElements.spectrogramContainer.classList.contains(
+                "dragging"
+              )
+            ) {
+              timelineElements.spectrogramContainer.classList.add("dragging");
+            }
           }
-        }
-      } else if (inLocalPlaybackScrubberHandle) {
-        // Drag local playtime scrubber
-        state.scrubLocalStarted = true;
-        const localProgress = (state.audioState.audioProgressZeroOne - state.left) / (state.right - state.left);
-        state.scrubDragOffsetX = e.offsetX - (localProgress * width);
-        state.startPlayheadDrag();
-        if (e.pointerType === "mouse") {
-          if (!timelineElements.spectrogramContainer.classList.contains("dragging")) {
-            timelineElements.spectrogramContainer.classList.add("dragging");
+        } else if (inLocalPlaybackScrubberHandle) {
+          // Drag local playtime scrubber
+          state.scrubLocalStarted = true;
+          const localProgress =
+            (state.audioState.audioProgressZeroOne - state.left) /
+            (state.right - state.left);
+          state.scrubDragOffsetX = e.offsetX - localProgress * width;
+          state.startPlayheadDrag();
+          if (e.pointerType === "mouse") {
+            if (
+              !timelineElements.spectrogramContainer.classList.contains(
+                "dragging"
+              )
+            ) {
+              timelineElements.spectrogramContainer.classList.add("dragging");
+            }
           }
         }
       }
@@ -874,51 +1056,73 @@ export const initTimeline = (
   timelineElements.overlayCanvas.addEventListener("pointerleave", (e) => {
     state.inGlobalPlaybackScrubberHandle = false;
     state.inLocalPlaybackScrubberHandle = false;
-    timelineElements.overlayCanvas.dispatchEvent(new Event("interaction-target-changed"));
+    timelineElements.overlayCanvas.dispatchEvent(
+      new Event("interaction-target-changed")
+    );
   });
 
   timelineElements.overlayCanvas.addEventListener("pointermove", (e) => {
     e.preventDefault();
-    if (e.pointerType === "touch" || (e.pointerType === "mouse" && e.button !== -1) || e.pressure > 0) {
-      state.pointers[e.pointerId] = {x: e.offsetX, y: e.offsetY, time: performance.now()};
-      onPointerMove(timelineElements.overlayCanvas, state, sharedState);
-      if (state.panStarted && e.pointerType === "mouse") {
-        if (!timelineElements.spectrogramContainer.classList.contains("dragging")) {
-          timelineElements.spectrogramContainer.classList.add("dragging");
+    if (
+      e.pointerType === "touch" ||
+      (e.pointerType === "mouse" && e.button !== -1) ||
+      e.pressure > 0
+    ) {
+      state.pointers[e.pointerId] = {
+        x: e.offsetX,
+        y: e.offsetY,
+        time: performance.now(),
+      };
+
+      if (state.customInteractionMode && state.inCustomInteraction) {
+        // Do nothing.
+        root.dispatchEvent(
+          new CustomEvent("custom-interaction-move", {
+            bubbles: false,
+            composed: true,
+            cancelable: false,
+            detail: {
+              offsetX: e.offsetX,
+              offsetY: e.offsetY,
+              container: timelineElements.overlayCanvas,
+            },
+          })
+        );
+      } else {
+        onPointerMove(timelineElements.overlayCanvas, state, sharedState);
+        if (state.panStarted && e.pointerType === "mouse") {
+          if (
+            !timelineElements.spectrogramContainer.classList.contains(
+              "dragging"
+            )
+          ) {
+            timelineElements.spectrogramContainer.classList.add("dragging");
+          }
         }
       }
-      if (state.regionCreationMode) {
-        timelineElements.overlayCanvas.dispatchEvent(new CustomEvent("custom-region-change", {
-          detail: {
-            left: Math.min(e.offsetX, state.interactionStartX),
-            right: Math.max(e.offsetX, state.interactionStartX),
-            top: Math.min(e.offsetY, state.interactionStartY),
-            bottom: Math.max(e.offsetY, state.interactionStartY),
-          }
-        }))
-      }
     } else if (e.pointerType === "mouse" && e.pressure === 0) {
-      const {
-        targetChanged
-      } = hitTestScrubHandles(e.offsetX, e.offsetY);
+      const { targetChanged } = hitTestScrubHandles(e.offsetX, e.offsetY);
       if (targetChanged) {
-        timelineElements.overlayCanvas.dispatchEvent(new Event("interaction-target-changed"));
+        timelineElements.overlayCanvas.dispatchEvent(
+          new Event("interaction-target-changed")
+        );
       }
 
       // NOTE: Re-dispatch mousemove for user/client embed handling.
-      root.dispatchEvent(new CustomEvent("move", {
-        bubbles: false,
-        composed: true,
-        cancelable: false,
-        detail: {
-          offsetX: e.offsetX,
-          offsetY: e.offsetY,
-          container: timelineElements.spectrogramContainer
-        }
-      }));
+      root.dispatchEvent(
+        new CustomEvent("move", {
+          bubbles: false,
+          composed: true,
+          cancelable: false,
+          detail: {
+            offsetX: e.offsetX,
+            offsetY: e.offsetY,
+            container: timelineElements.spectrogramContainer,
+          },
+        })
+      );
     }
   });
-
 
   const distanceBetweenPoints = (x1, y1, x2, y2) => {
     const dX = Math.abs(x1 - x2);
@@ -932,72 +1136,129 @@ export const initTimeline = (
     const maxDoubleClickIntervalMs = 200;
     timelineElements.overlayCanvas.releasePointerCapture(e.pointerId);
     let doubleClickEventEmitted = false;
-    if (state.pointers[e.pointerId] && Object.keys(state.pointers).length === 1) {
-      const timeElapsed = performance.now() - state.pointers[e.pointerId].time;
-      const distanceMoved = distanceBetweenPoints(state.pointers[e.pointerId].x, state.pointers[e.pointerId].y, e.offsetX, e.offsetY);
-      // NOTE: This need to be a double-click, because a single click action would clash with the select action
-      //  We need to delay the select action my `maxDoubleClickInterval` to make sure
-      //  it wasn't the beginning of a double-click action.
-      if (distanceMoved < 4 * devicePixelRatio && timeElapsed < 200) {
-        clearTimeout(state.selectPending);
-        if (state.doubleClickInProgress) {
-          const timeElapsed = performance.now() - state.doubleClickInProgress.time;
-          const distanceMoved = distanceBetweenPoints(state.doubleClickInProgress.x, state.doubleClickInProgress.y, e.offsetX, e.offsetY);
-          if (distanceMoved < 4 * devicePixelRatio && timeElapsed < maxDoubleClickIntervalMs) {
-            const offsetZeroOne = e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
-            const c = clampZeroOne(offsetZeroOne);
-            const audioOffsetZeroOne = state.left + (c * (state.right - state.left));
-            doubleClickEventEmitted = true;
-            timelineElements.overlayCanvas.dispatchEvent(new CustomEvent("double-click", {
-              detail: {
-                audioOffsetZeroOne,
-              }
-            }));
+
+    let wasInCustomInteraction =
+      state.customInteractionMode && state.inCustomInteraction;
+    if (state.customInteractionMode && state.inCustomInteraction) {
+      root.dispatchEvent(
+        new CustomEvent("custom-interaction-end", {
+          composed: true,
+          bubbles: false,
+          cancelable: false,
+          detail: {
+            offsetX: e.offsetX,
+            offsetY: e.offsetY,
+            container: timelineElements.overlayCanvas,
+          },
+        })
+      );
+    } else {
+      // Check if we're in a double click
+      if (
+        state.pointers[e.pointerId] &&
+        Object.keys(state.pointers).length === 1
+      ) {
+        const timeElapsed =
+          performance.now() - state.pointers[e.pointerId].time;
+        const distanceMoved = distanceBetweenPoints(
+          state.pointers[e.pointerId].x,
+          state.pointers[e.pointerId].y,
+          e.offsetX,
+          e.offsetY
+        );
+        // NOTE: This need to be a double-click, because a single click action would clash with the select action
+        //  We need to delay the select action my `maxDoubleClickInterval` to make sure
+        //  it wasn't the beginning of a double-click action.
+        if (distanceMoved < 4 * devicePixelRatio && timeElapsed < 200) {
+          clearTimeout(state.selectPending);
+          if (state.doubleClickInProgress) {
+            const timeElapsed =
+              performance.now() - state.doubleClickInProgress.time;
+            const distanceMoved = distanceBetweenPoints(
+              state.doubleClickInProgress.x,
+              state.doubleClickInProgress.y,
+              e.offsetX,
+              e.offsetY
+            );
+            if (
+              distanceMoved < 4 * devicePixelRatio &&
+              timeElapsed < maxDoubleClickIntervalMs
+            ) {
+              const offsetZeroOne =
+                e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
+              const c = clampZeroOne(offsetZeroOne);
+              const audioOffsetZeroOne =
+                state.left + c * (state.right - state.left);
+              doubleClickEventEmitted = true;
+              timelineElements.overlayCanvas.dispatchEvent(
+                new CustomEvent("double-click", {
+                  detail: {
+                    audioOffsetZeroOne,
+                  },
+                })
+              );
+            }
           }
+          state.doubleClickInProgress = {
+            x: e.offsetX,
+            y: e.offsetY,
+            time: performance.now(),
+          };
         }
-        state.doubleClickInProgress = { x: e.offsetX, y: e.offsetY, time: performance.now() };
       }
     }
-
     delete state.pointers[e.pointerId];
     const numPointers = Object.keys(state.pointers).length;
-    if (numPointers < 2) {
-      if (sharedState.interacting && state.pinchStarted) {
-        timelineElements.overlayCanvas.dispatchEvent(new Event("interaction-end"));
+    if (!wasInCustomInteraction) {
+      if (numPointers < 2) {
+        if (sharedState.interacting && state.pinchStarted) {
+          timelineElements.overlayCanvas.dispatchEvent(
+            new Event("interaction-end")
+          );
+        }
+        state.pinchStarted = false;
       }
-      state.pinchStarted = false;
-    }
-    if (numPointers < 1) {
-      if (state.scrubLocalStarted || state.scrubGlobalStarted) {
-        state.endPlayheadDrag();
-      }
-      if (!state.regionCreationMode) {
+      if (numPointers < 1) {
+        if (state.scrubLocalStarted || state.scrubGlobalStarted) {
+          state.endPlayheadDrag();
+        }
+
         const pointerMoved = () => {
           const dX = Math.abs(state.interactionStartX - e.offsetX);
           const dY = Math.abs(state.interactionStartY - e.offsetY);
           return dX > 4 || dY > 4;
         };
         const movedEnough = pointerMoved();
-        if (!movedEnough || (!state.scrubLocalStarted && !state.scrubGlobalStarted && !state.pinchStarted && (!state.panStarted || (state.panStarted && !movedEnough)))) {
+        if (
+          !movedEnough ||
+          (!state.scrubLocalStarted &&
+            !state.scrubGlobalStarted &&
+            !state.pinchStarted &&
+            (!state.panStarted || (state.panStarted && !movedEnough)))
+        ) {
           // Clicked without moving pointer
           if (!doubleClickEventEmitted) {
             const x = e.offsetX;
             const y = e.offsetY;
             state.selectPending = setTimeout(() => {
-              root.dispatchEvent(new CustomEvent("select", {
-                bubbles: false,
-                composed: true,
-                cancelable: false,
-                detail: {
-                  offsetX: x,
-                  offsetY: y,
-                  container: timelineElements.spectrogramContainer
-                }
-              }));
+              root.dispatchEvent(
+                new CustomEvent("select", {
+                  bubbles: false,
+                  composed: true,
+                  cancelable: false,
+                  detail: {
+                    offsetX: x,
+                    offsetY: y,
+                    container: timelineElements.spectrogramContainer,
+                  },
+                })
+              );
             }, maxDoubleClickIntervalMs);
           }
         }
-        if (timelineElements.spectrogramContainer.classList.contains("dragging")) {
+        if (
+          timelineElements.spectrogramContainer.classList.contains("dragging")
+        ) {
           timelineElements.spectrogramContainer.classList.remove("dragging");
         }
 
@@ -1005,26 +1266,23 @@ export const initTimeline = (
         state.scrubGlobalStarted = false;
         state.scrubLocalStarted = false;
         state.pinchStarted = false;
-      } else {
-        timelineElements.overlayCanvas.dispatchEvent(new CustomEvent("custom-region-create", {
-          detail: {
-            left: Math.min(e.offsetX, state.interactionStartX),
-            right: Math.max(e.offsetX, state.interactionStartX),
-            top: Math.min(e.offsetY, state.interactionStartY),
-            bottom: Math.max(e.offsetY, state.interactionStartY),
-          }
-        }));
-        state.regionCreationMode = false;
-        timelineElements.spectrogramContainer.classList.remove("region-creation-mode");
       }
-      if (sharedState.interacting) {
-        timelineElements.overlayCanvas.dispatchEvent(new Event("interaction-end"));
-      }
+    }
+    if (numPointers < 1 && sharedState.interacting) {
+      timelineElements.overlayCanvas.dispatchEvent(
+        new Event("interaction-end")
+      );
     }
   };
 
-  timelineElements.overlayCanvas.addEventListener("pointerup", endPointerInteraction);
-  timelineElements.overlayCanvas.addEventListener("pointercancel", endPointerInteraction);
+  timelineElements.overlayCanvas.addEventListener(
+    "pointerup",
+    endPointerInteraction
+  );
+  timelineElements.overlayCanvas.addEventListener(
+    "pointercancel",
+    endPointerInteraction
+  );
 
   const curriedSetInitialZoom = (left, right, top, bottom, initial, final) =>
     setInitialZoom(

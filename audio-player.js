@@ -10,17 +10,14 @@ export const initAudioPlayer = (
   const gainNode = audioContext.createGain();
   const filterNode = audioContext.createBiquadFilter();
   filterNode.type = "allpass";
-  const mediaNode = audioContext.createMediaElementSource(playerElements.audio);
-  playerElements.audio.addEventListener("canplay", () => {
-    mediaNode
-      .connect(filterNode)
-      .connect(gainNode)
-      .connect(audioContext.destination);
-  });
   const volume = localStorage.getItem("spectastiq-volume") || 1.0;
   setGain(gainNode, volume);
 
   const state = {
+    audioNodes: {
+      gainNode,
+      filterNode,
+    },
     audioContext,
     audioProgressZeroOne: 0,
     playbackStartOffset: 0,
@@ -36,34 +33,11 @@ export const initAudioPlayer = (
     mainPlayheadDragOffsetX: 0,
     dragPlayheadRaf: 0,
     playheadWasInRangeWhenPlaybackStarted: false,
-    resolver: () => {},
-    resolved: false,
     root,
   };
 
   playerElements.playButton.addEventListener("click", async () => {
     await togglePlayback(state, timelineState, sharedState, playerElements);
-  });
-  playerElements.audio.addEventListener("ended", () => {
-    pauseAudio(state, timelineState, sharedState, playerElements, 1);
-  });
-  playerElements.audio.addEventListener("progress", () => {
-    if (!state.resolved) {
-      state.resolved = true;
-      state.resolver();
-    }
-  });
-  playerElements.audio.addEventListener("timeupdate", () => {
-    const currentTimeZeroOne = playerElements.audio.currentTime / state.audioDuration;
-    if (currentTimeZeroOne >= 1) {
-      pauseAudio(state, timelineState, sharedState, playerElements, 1);
-    }
-  })
-  playerElements.audio.addEventListener("canplaythrough", () => {
-    if (!state.resolved) {
-      state.resolved = true;
-      state.resolver();
-    }
   });
 
   return {
@@ -83,8 +57,8 @@ export const initAudioPlayer = (
       setBandPass(filterNode, minFreq, maxFreq),
     removeBandPass: () => removeBandPass(filterNode),
     setGain: (volume) => setGain(gainNode, volume),
-    pause: (stopOffsetZeroOne) => pauseAudio(state, timelineState, sharedState, playerElements, stopOffsetZeroOne),
-    play: (startOffsetZeroOne) => playAudio(state, timelineState, sharedState, playerElements, startOffsetZeroOne),
+    pause: () => pauseAudio(state, timelineState, sharedState, playerElements),
+    play: (startOffsetZeroOne, stopOffsetZeroOne) => playAudio(state, timelineState, sharedState, playerElements, startOffsetZeroOne, stopOffsetZeroOne),
     togglePlayback: () => togglePlayback(state, timelineState, sharedState, playerElements),
     startPlayheadDrag: () => startPlayheadDrag(state, timelineState, sharedState, playerElements),
     endPlayheadDrag: () => endPlayheadDrag(state, timelineState, sharedState, playerElements),
@@ -177,69 +151,70 @@ const setPlaybackTime = async (offsetZeroOne, state, playerElements) => {
     if (state.audioContext.state !== "running") {
       await state.audioContext.resume();
     }
-    playerElements.audio.currentTime = offsetZeroOne * state.audioDuration;
+    //playerElements.audio.currentTime = offsetZeroOne * state.audioDuration;
     state.audioProgressZeroOne = offsetZeroOne;
     state.playbackStartTime = performance.now();
     state.playbackStartOffset = offsetZeroOne;
   }
 };
 
-export const initAudio = async (playerElements, audioFileUrl, state, audioDuration) => {
-  state.audioDuration = audioDuration;
-  if (
-    playerElements.audio.currentTime !== undefined &&
-    state.audioDuration !== undefined
-  ) {
-    state.audioProgressZeroOne =
-      playerElements.audio.currentTime / state.audioDuration;
-    state.progressSampleTime = performance.now();
-  }
-  state.resolved = false;
-  return new Promise((resolve) => {
-    if (playerElements.audio.src) {
-      URL.revokeObjectURL(playerElements.audio.src);
-    }
-    state.resolver = resolve;
-    playerElements.audio.src = audioFileUrl;
-  });
+export const initAudio = (playerElements, audioFloatData, state) => {
+  state.audioDuration = audioFloatData.length / 48000;
+  const buffer = state.audioContext.createBuffer(1, audioFloatData.length, 48000);
+  buffer.copyToChannel(audioFloatData, 0);
+  state.audioBuffer = buffer;
 };
 
-const playAudio = async (state, timelineState, sharedState, playerElements, startAtOffsetZeroOne) => {
+const playAudio = async (state, timelineState, sharedState, playerElements, startAtOffsetZeroOne, stopAtOffsetZeroOne) => {
+  if (state.playing) {
+    pauseAudio(state, timelineState, sharedState, playerElements);
+  }
+
+  if (state.audioContext.state !== "running") {
+    await state.audioContext.resume();
+  }
   if (startAtOffsetZeroOne !== undefined) {
-    await setPlaybackTime(startAtOffsetZeroOne, state, playerElements);
+    state.audioProgressZeroOne = startAtOffsetZeroOne;
   }
-  if (state.audioProgressZeroOne === 1) {
-    await setPlaybackTime(0, state, playerElements);
-  }
-  if (!state.playing) {
-    if (state.audioContext.state !== "running") {
-      await state.audioContext.resume();
-    }
-    await playerElements.audio.play();
-    state.playing = true;
-    state.playbackStartTime = performance.now();
-    playerElements.playButton.classList.remove("paused");
-    state.playbackStartOffset = state.audioProgressZeroOne;
-    updatePlayhead(state, timelineState, sharedState, playerElements);
-    state.root.dispatchEvent(
-      new Event("playback-started", {
-        bubbles: false,
-        composed: true,
-        cancelable: false,
-      })
-    );
-  }
-};
-const pauseAudio = async (state, timelineState, sharedState, playerElements, stopAtOffsetZeroOne) => {
+  state.audioNodes.bufferNode = state.audioContext.createBufferSource();
+  state.audioNodes.bufferNode.buffer = state.audioBuffer;
+  state.audioNodes.bufferNode
+    .connect(state.audioNodes.filterNode)
+    .connect(state.audioNodes.gainNode)
+    .connect(state.audioContext.destination);
+
+  const startOffset = state.audioProgressZeroOne * state.audioDuration;
+  state.playing = true;
   if (stopAtOffsetZeroOne !== undefined) {
-    await setPlaybackTime(stopAtOffsetZeroOne, state, playerElements);
-    updatePlayhead(state, timelineState, sharedState, playerElements);
+    const endOffset = stopAtOffsetZeroOne * state.audioDuration;
+    const secondsToPlay = endOffset - startOffset;
+    state.audioNodes.bufferNode.start(0, startOffset, secondsToPlay);
+    state.playbackStartTime = performance.now() + state.audioContext.outputLatency;
+    state.expectedPlaybackEnd = state.playbackStartTime + (secondsToPlay * 1000);
+  } else {
+    state.audioNodes.bufferNode.start(0, startOffset);
+    state.playbackStartTime = performance.now() + state.audioContext.outputLatency;
+    state.expectedPlaybackEnd = state.playbackStartTime + (state.audioDuration * 1000);
   }
+
+  state.playbackStartOffset = state.audioProgressZeroOne;
+
+  playerElements.playButton.classList.remove("paused");
+  updatePlayhead(state, timelineState, sharedState, playerElements);
+  state.root.dispatchEvent(
+    new Event("playback-started", {
+      bubbles: false,
+      composed: true,
+      cancelable: false,
+    })
+  );
+};
+const pauseAudio = (state, timelineState, sharedState, playerElements) => {
   if (state.playing) {
     cancelAnimationFrame(state.audioStatusPoll);
     state.audioStatusPoll = 0;
     state.playing = false;
-    playerElements.audio.pause();
+    state.audioNodes.bufferNode.stop();
     playerElements.playButton.classList.add("paused");
     state.root.dispatchEvent(
       new Event("playback-ended", {
@@ -266,6 +241,9 @@ const updatePlayhead = (
   const elapsedSincePlaybackStarted = state.playing ? (performance.now() - (state.playbackStartTime || performance.now())) / 1000 : 0;
   if (state.playing) {
     state.audioProgressZeroOne = Math.max(0, Math.min(1, ((state.playbackStartOffset * state.audioDuration) + elapsedSincePlaybackStarted) / state.audioDuration));
+  }
+  if (state.audioProgressZeroOne === 1 || performance.now() > state.expectedPlaybackEnd) {
+    pauseAudio(state, timelineState, sharedState, playerElements, 1);
   }
   const playheadWidth = Math.min(2, 1.5);
   const progress = state.audioProgressZeroOne;
@@ -419,7 +397,7 @@ const togglePlayback = async (state, timelineState, sharedState, playerElements)
   if (!state.playing) {
     await playAudio(state, timelineState, sharedState, playerElements);
   } else {
-    await pauseAudio(state, timelineState, sharedState, playerElements);
+    pauseAudio(state, timelineState, sharedState, playerElements);
   }
   return state.playing;
 };

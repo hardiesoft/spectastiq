@@ -6,13 +6,17 @@ declare class Spectastiq extends HTMLElement {
     maxZeroOne: number
   ) => Promise<void>;
   setPlaybackFrequencyBandPass: (minFreqHz: number, maxFreqHz: number) => void;
+  getGainForRegionOfInterest: (startZeroOne: number, endZeroOne: number, minZeroOne: number, maxZeroOne: number) => number;
   removePlaybackFrequencyBandPass: () => void;
-  enterRegionCreationMode: () => void;
-  exitRegionCreationMode: () => void;
+  enterCustomInteractionMode: () => void;
+  exitCustomInteractionMode: () => void;
+  beginCustomInteraction: () => void;
+  endCustomInteraction: () => void;
   resetYZoom: () => void;
   transformY: (y: number) => number;
-  play: (startAtOffsetZeroOne?: number) => Promise<void>;
-  pause: (stopAtOffsetZeroOne?: number) => Promise<void>;
+  inverseTransformY: (yZeroOne: number) => number;
+  play: (startAtOffsetZeroOne?: number, endAtOffsetZeroOne?: number) => Promise<void>;
+  pause: () => void;
   setGain: (gain: number) => number;
   nextPalette: () => string;
 }
@@ -86,9 +90,18 @@ interface SpectastiqSelectEvent
   type: "select";
 }
 
-interface SpectastiqRegionCreationEvent
-  extends CustomEvent<RegionCreationEvent> {
-  type: "region-create";
+interface SpectastiqCustomInteractionStartEvent
+  extends CustomEvent<InteractionCoordinatesEvent> {
+  type: "custom-interaction-start";
+}
+
+interface SpectastiqCustomInteractionMoveEvent
+  extends CustomEvent<InteractionCoordinatesEvent> {
+  type: "custom-interaction-move";
+}
+interface SpectastiqCustomInteractionEndEvent
+  extends CustomEvent<InteractionCoordinatesEvent> {
+  type: "custom-interaction-end";
 }
 
 declare global {
@@ -104,6 +117,8 @@ declare global {
     "playback-ended": SpectastiqPlaybackEndedEvent;
     move: SpectastiqPointerMoveEvent;
     select: SpectastiqSelectEvent;
-    "region-create": SpectastiqRegionCreationEvent;
+    "custom-interaction-start": SpectastiqCustomInteractionStartEvent;
+    "custom-interaction-move": SpectastiqCustomInteractionMoveEvent;
+    "custom-interaction-end": SpectastiqCustomInteractionEndEvent;
   }
 }

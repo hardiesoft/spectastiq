@@ -17,9 +17,34 @@ async function initWorkers(state) {
     await Promise.all(initWorkers);
   }
 }
-const getAudioObject = (fileBytes) => {
-  return URL.createObjectURL(new Blob([fileBytes], { type: "audio/wav" }));
+
+const normalizeAudioBuffer = (buffer) => {
+  // Find the peak amplitude in the buffer
+  let peak = 0;
+  for (let i = 0; i < buffer.length; i++) {
+    const sample = Math.abs(buffer[i]);
+    if (sample > peak) {
+      peak = sample;
+    }
+  }
+
+  // If there's no signal, return early
+  if (peak === 0) return buffer;
+
+  // Calculate the target amplitude for -3 dBFS
+  const targetAmplitude = Math.pow(10, (-3) / 20); // Convert dB to linear scale
+
+  // Calculate scaling factor
+  const scaleFactor = targetAmplitude / peak;
+
+  // Apply normalization to all samples
+  for (let i = 0; i < buffer.length; i++) {
+    buffer[i] *= scaleFactor;
+  }
+
+  return buffer;
 };
+
 
 /**
  * @param fileBytes {ArrayBuffer}
@@ -46,8 +71,7 @@ export const initSpectrogram = async (fileBytes, previousState) => {
     workers: (previousState && previousState.workers) || [],
   };
   await initWorkers(state);
-  //const fileBytes = await (await fetch(filePath)).arrayBuffer();
-  const audioFileUrl = getAudioObject(fileBytes);
+  // Normalise the audio to a peak of -3 dBFS
   const audioContext = (previousState && previousState.offlineAudioContext) || new OfflineAudioContext({
     length: 1024 * 1024,
     numberOfChannels: 1,
@@ -65,7 +89,8 @@ export const initSpectrogram = async (fileBytes, previousState) => {
       break;
     }
   }
-  const actualFloatData = floatData.subarray(0, actualEnd);
+  const actualFloatData = normalizeAudioBuffer(floatData.subarray(0, actualEnd));
+  const audioFloatData = actualFloatData;
 
   if (false) {
     // Normalise float data:
@@ -105,10 +130,6 @@ export const initSpectrogram = async (fileBytes, previousState) => {
     state.max = undefined;
   };
 
-  const unloadAudio = () => {
-    URL.revokeObjectURL(audioFileUrl);
-  };
-
   const terminateWorkers = (state) => {
     for (const worker of state.workers) {
       worker.terminate();
@@ -118,11 +139,9 @@ export const initSpectrogram = async (fileBytes, previousState) => {
   return {
     renderRange: renderRange(state),
     renderToContext: renderToContext(state),
-    audioFileUrl,
-    numAudioSamples: actualFloatData.length,
+    audioFloatData,
     invalidateCanvasCaches,
     cyclePalette: () => cyclePalette(state),
-    unloadAudio,
     terminateWorkers: () => terminateWorkers(state),
     persistentSpectrogramState: { workers: state.workers, offlineAudioContext: audioContext, ctxs: state.ctxs }
   };
