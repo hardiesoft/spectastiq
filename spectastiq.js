@@ -394,6 +394,8 @@ export default class Spectastiq extends HTMLElement {
   loadSrc(src) {
     const startTimeOffset = Number(this.getAttribute("start")) || 0;
     const endTimeOffset = Number(this.getAttribute("end")) || 1;
+    const delegateDoubleClick = this.getAttribute("delegate-double-click");
+    this.applicationHandlesDoubleClick = delegateDoubleClick !== "false" && delegateDoubleClick !== "0" && delegateDoubleClick !== null;
     const requestHeaders = this.getAttribute("request-headers");
     let headers = {};
     if (requestHeaders) {
@@ -501,11 +503,13 @@ export default class Spectastiq extends HTMLElement {
             invalidateCanvasCaches,
             terminateWorkers,
             cyclePalette,
+            getGainForRegion,
             persistentSpectrogramState,
           } = await initSpectrogram(
             fileBytes,
             this.persistentSpectrogramState || null
           );
+          this.getGainForRegionOfInterest = getGainForRegion;
           timelineState.numAudioSamples = audioFloatData.length;
           timelineState.left = 0;
           timelineState.top = 1;
@@ -1185,8 +1189,19 @@ export default class Spectastiq extends HTMLElement {
         redrawFrequencyScaleOverlay(timelineState, e.detail.sampleRate);
     });
     overlayCanvas.addEventListener("double-click", async (e) => {
-      // If there's a selected track, should we stop at the end of it?
-      await play(e.detail.audioOffsetZeroOne);
+      console.log("delegate doubleclick?", this.applicationHandlesDoubleClick);
+      if (this.applicationHandlesDoubleClick) {
+
+        this.shadowRoot.dispatchEvent(new CustomEvent("double-click", {
+          detail: e.detail,
+          composed: true,
+          bubbles: false,
+          cancelable: false,
+        }));
+      } else {
+        // If there's a selected track, should we stop at the end of it?
+        await play(e.detail.audioOffsetZeroOne);
+      }
     });
 
     const timeline = initTimeline(
@@ -1281,12 +1296,6 @@ export default class Spectastiq extends HTMLElement {
     };
     this.removePlaybackFrequencyBandPass = () => removeBandPass();
 
-    this.getGainForRegionOfInterest = (start, end, min, max) => {
-      // Look at the best resolution slice we have for the supplied region, work out the min, max, mean, median
-      // intensities for the region, and work out what that might mean in terms of dB, and how that can
-      // be translated into a gain value.
-      return 1.0;
-    };
     this.selectRegionOfInterest = async (start, end, min, max) => {
       {
         const playbackStart = start;

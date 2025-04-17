@@ -45,6 +45,37 @@ const normalizeAudioBuffer = (buffer) => {
   return buffer;
 };
 
+const getGainForRegion = (state, minZeroOne, maxZeroOne, minFreqZeroOne, maxFreqZeroOne) => {
+  const fullSpectrogram = state.imageDatas[0].imageData;
+  const sliceLen = FFT_WIDTH / 2;
+  let min = Number.MAX_VALUE;
+  let max = 0;
+  const numSlices = fullSpectrogram.length / sliceLen;
+  const initialNoiseSliceNum = 0;
+  const startingSlice = Math.max(initialNoiseSliceNum, Math.floor(numSlices * minZeroOne));
+  const endingSlice = Math.floor(numSlices * maxZeroOne);
+  const startSliceOffset = startingSlice * sliceLen;
+  const endSliceOffset = endingSlice * sliceLen;
+  const freqRange = Math.min(sliceLen, state.clip);
+  const minFreqCutOff = Math.floor(freqRange * minFreqZeroOne);
+  const maxFreqCutOff = Math.floor(freqRange * maxFreqZeroOne);
+  for (
+    let sliceNum = startSliceOffset;
+    sliceNum < endSliceOffset;
+    sliceNum += sliceLen
+  ) {
+    const slice = state.sharedOutputData.slice(sliceNum, sliceNum + sliceLen);
+    for (let i = minFreqCutOff; i < maxFreqCutOff; i++) {
+      const val = slice[i];
+      min = Math.min(min, val);
+      max = Math.max(max, val);
+    }
+  }
+  max = Math.min(max, state.max);
+  const globalMax = Math.log10(state.max);
+  const localMax = Math.log10(max);
+  return globalMax / localMax;
+};
 
 /**
  * @param fileBytes {ArrayBuffer}
@@ -91,30 +122,6 @@ export const initSpectrogram = async (fileBytes, previousState) => {
   }
   const actualFloatData = normalizeAudioBuffer(floatData.subarray(0, actualEnd));
   const audioFloatData = actualFloatData;
-
-  if (false) {
-    // Normalise float data:
-    let min = Number.MAX_VALUE;
-    let max = 0;
-    for (let i = 0; i < actualFloatData.length; i++) {
-      const v = Math.abs(actualFloatData[i]);
-      if (v < min) {
-        min = v;
-      }
-      if (v > max) {
-        max = v;
-      }
-    }
-
-    // TODO: Maybe increase gain by the amount required to normalise the audio?
-    console.log("Float max", max);
-    // const range = max - min;
-    // for (let i = 0; i < actualFloatData.length; i++) {
-    //   actualFloatData[i] = (actualFloatData[i] - min) / range;
-    // }
-    console.log("Dynamic range", 1 / max);
-  }
-
   if (USE_SHARED_ARRAY_BUFFER && window.SharedArrayBuffer) {
     state.sharedFloatData = new Float32Array(
       new SharedArrayBuffer(actualFloatData.byteLength)
@@ -143,7 +150,8 @@ export const initSpectrogram = async (fileBytes, previousState) => {
     invalidateCanvasCaches,
     cyclePalette: () => cyclePalette(state),
     terminateWorkers: () => terminateWorkers(state),
-    persistentSpectrogramState: { workers: state.workers, offlineAudioContext: audioContext, ctxs: state.ctxs }
+    persistentSpectrogramState: { workers: state.workers, offlineAudioContext: audioContext, ctxs: state.ctxs },
+    getGainForRegion: (startZeroOne, endZeroOne, minFreq, maxFreq) => getGainForRegion(state, startZeroOne, endZeroOne, minFreq, maxFreq),
   };
 };
 

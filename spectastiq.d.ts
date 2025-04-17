@@ -37,17 +37,14 @@ interface PlayheadChangeEvent {
   timeInSeconds: number;
 }
 
+interface DoubleClickEvent {
+  audioOffsetZeroOne: number;
+}
+
 interface InteractionCoordinatesEvent {
   offsetX: number;
   offsetY: number;
   container: HTMLElement;
-}
-
-interface RegionCreationEvent {
-  start: number;
-  end: number;
-  minFreqHz: number;
-  maxFreqHz: number;
 }
 
 interface AudioLoadEvent {
@@ -104,6 +101,11 @@ interface SpectastiqCustomInteractionEndEvent
   type: "custom-interaction-end";
 }
 
+interface SpectastiqDoubleClickEvent
+  extends CustomEvent<DoubleClickEvent> {
+  type: "double-click";
+}
+
 declare global {
   interface HTMLElementTagNameMap {
     "spectastiq-viewer": Spectastiq;
@@ -120,5 +122,6 @@ declare global {
     "custom-interaction-start": SpectastiqCustomInteractionStartEvent;
     "custom-interaction-move": SpectastiqCustomInteractionMoveEvent;
     "custom-interaction-end": SpectastiqCustomInteractionEndEvent;
+    "double-click": SpectastiqDoubleClickEvent;
   }
 }

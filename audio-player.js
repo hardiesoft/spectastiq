@@ -10,7 +10,7 @@ export const initAudioPlayer = (
   const gainNode = audioContext.createGain();
   const filterNode = audioContext.createBiquadFilter();
   filterNode.type = "allpass";
-  const volume = localStorage.getItem("spectastiq-volume") || 1.0;
+  const volume = 1.0;
   setGain(gainNode, volume);
 
   const state = {
@@ -85,7 +85,6 @@ const setBandPass = (biQuadFilterNode, minFreq, maxFreq) => {
 
 const setGain = (gainNode, volume) => {
   gainNode.gain.value = volume;
-  localStorage.setItem("spectastiq-volume", volume);
   return gainNode.gain.value;
 };
 
@@ -103,7 +102,9 @@ const endPlayheadDrag = (
   playerElements
 ) => {
   if (state.wasPlaying) {
-    playAudio(state, timelineState, sharedState, playerElements, state.audioProgressZeroOne);
+    playAudio(state, timelineState, sharedState, playerElements, state.audioProgressZeroOne).then(() => {
+      // Do nothing
+    });
   }
 };
 
@@ -116,8 +117,9 @@ const dragGlobalPlayhead = (xZeroOne, state, timelineState, sharedState, playerE
     cancelAnimationFrame(state.dragPlayheadRaf);
     state.dragPlayheadRaf = requestAnimationFrame(async () => {
       state.audioProgressZeroOne = thisOffsetXZeroOne;
-      setPlaybackTime(thisOffsetXZeroOne, state, playerElements);
-      updatePlayhead(state, timelineState, sharedState, playerElements);
+      setPlaybackTime(thisOffsetXZeroOne, state, playerElements).then(() => {
+        updatePlayhead(state, timelineState, sharedState, playerElements);
+      });
     });
 };
 
@@ -141,8 +143,9 @@ const dragLocalPlayhead = (
     state.dragPlayheadRaf = requestAnimationFrame(async () => {
       state.audioProgressZeroOne = thisOffsetXZeroOne;
       //state.progressSampleTime = performance.now();
-      setPlaybackTime(thisOffsetXZeroOne, state, playerElements);
-      updatePlayhead(state, timelineState, sharedState, playerElements);
+      setPlaybackTime(thisOffsetXZeroOne, state, playerElements).then(() => {
+        updatePlayhead(state, timelineState, sharedState, playerElements);
+      });
     });
 };
 
@@ -151,7 +154,6 @@ const setPlaybackTime = async (offsetZeroOne, state, playerElements) => {
     if (state.audioContext.state !== "running") {
       await state.audioContext.resume();
     }
-    //playerElements.audio.currentTime = offsetZeroOne * state.audioDuration;
     state.audioProgressZeroOne = offsetZeroOne;
     state.playbackStartTime = performance.now();
     state.playbackStartOffset = offsetZeroOne;
@@ -184,19 +186,24 @@ const playAudio = async (state, timelineState, sharedState, playerElements, star
     .connect(state.audioContext.destination);
 
   const startOffset = state.audioProgressZeroOne * state.audioDuration;
-  state.playing = true;
+
   if (stopAtOffsetZeroOne !== undefined) {
     const endOffset = stopAtOffsetZeroOne * state.audioDuration;
     const secondsToPlay = endOffset - startOffset;
+
+    state.endOffsetZeroOne = stopAtOffsetZeroOne;
+    state.startOffsetZeroOne = state.audioProgressZeroOne;
+
     state.audioNodes.bufferNode.start(0, startOffset, secondsToPlay);
     state.playbackStartTime = performance.now() + state.audioContext.outputLatency;
     state.expectedPlaybackEnd = state.playbackStartTime + (secondsToPlay * 1000);
   } else {
+    delete state.endOffsetZeroOne;
     state.audioNodes.bufferNode.start(0, startOffset);
     state.playbackStartTime = performance.now() + state.audioContext.outputLatency;
     state.expectedPlaybackEnd = state.playbackStartTime + (state.audioDuration * 1000);
   }
-
+  state.playing = true;
   state.playbackStartOffset = state.audioProgressZeroOne;
 
   playerElements.playButton.classList.remove("paused");
@@ -238,12 +245,19 @@ const updatePlayhead = (
     playheadCanvasCtx,
     mainPlayheadCanvasCtx,
   } = playerElements;
+  const lastProgress = state.audioProgressZeroOne;
   const elapsedSincePlaybackStarted = state.playing ? (performance.now() - (state.playbackStartTime || performance.now())) / 1000 : 0;
   if (state.playing) {
     state.audioProgressZeroOne = Math.max(0, Math.min(1, ((state.playbackStartOffset * state.audioDuration) + elapsedSincePlaybackStarted) / state.audioDuration));
   }
   if (state.audioProgressZeroOne === 1 || performance.now() > state.expectedPlaybackEnd) {
     pauseAudio(state, timelineState, sharedState, playerElements, 1);
+    if (state.endOffsetZeroOne !== undefined) {
+      state.audioProgressZeroOne = state.endOffsetZeroOne;
+    } else {
+      // Make sure we don't overshoot
+      state.audioProgressZeroOne = lastProgress;
+    }
   }
   const playheadWidth = Math.min(2, 1.5);
   const progress = state.audioProgressZeroOne;
