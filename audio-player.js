@@ -187,6 +187,7 @@ const playAudio = async (state, timelineState, sharedState, playerElements, star
 
   const startOffset = state.audioProgressZeroOne * state.audioDuration;
 
+  const playbackLatency = state.audioContext.outputLatency || state.audioContext.baseLatency || 0;
   if (stopAtOffsetZeroOne !== undefined) {
     const endOffset = stopAtOffsetZeroOne * state.audioDuration;
     const secondsToPlay = endOffset - startOffset;
@@ -195,12 +196,12 @@ const playAudio = async (state, timelineState, sharedState, playerElements, star
     state.startOffsetZeroOne = state.audioProgressZeroOne;
 
     state.audioNodes.bufferNode.start(0, startOffset, secondsToPlay);
-    state.playbackStartTime = performance.now() + state.audioContext.outputLatency;
+    state.playbackStartTime = performance.now() + playbackLatency;
     state.expectedPlaybackEnd = state.playbackStartTime + (secondsToPlay * 1000);
   } else {
     delete state.endOffsetZeroOne;
     state.audioNodes.bufferNode.start(0, startOffset);
-    state.playbackStartTime = performance.now() + state.audioContext.outputLatency;
+    state.playbackStartTime = performance.now() + playbackLatency;
     state.expectedPlaybackEnd = state.playbackStartTime + (state.audioDuration * 1000);
   }
   state.playing = true;
@@ -250,7 +251,7 @@ const updatePlayhead = (
   if (state.playing) {
     state.audioProgressZeroOne = Math.max(0, Math.min(1, ((state.playbackStartOffset * state.audioDuration) + elapsedSincePlaybackStarted) / state.audioDuration));
   }
-  if (state.audioProgressZeroOne === 1 || performance.now() > state.expectedPlaybackEnd) {
+  if (state.playing && (state.audioProgressZeroOne === 1 || performance.now() > state.expectedPlaybackEnd)) {
     pauseAudio(state, timelineState, sharedState, playerElements, 1);
     if (state.endOffsetZeroOne !== undefined) {
       state.audioProgressZeroOne = state.endOffsetZeroOne;
