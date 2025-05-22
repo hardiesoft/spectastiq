@@ -2606,9 +2606,18 @@ void main() {
   const numWorkers = (navigator.hardwareConcurrency || 2) - 1;
   async function initWorkers(state) {
     if (state.workers.length === 0) {
-      const wasm = await (
-        await fetch(new URL("./pkg/spectastiq_bg.wasm", (_documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === 'SCRIPT' && _documentCurrentScript.src || new URL('spectastiq-bundle.js', document.baseURI).href)))
-      ).arrayBuffer();
+      const remoteScriptOrigin = cdnScriptOrigin();
+      let wasm;
+      if (remoteScriptOrigin) {
+        wasm = await (
+          await fetch(`${remoteScriptOrigin}/pkg/spectastiq_bg.wasm`)
+        ).arrayBuffer();
+      } else {
+        wasm = await (
+          await fetch(new URL("./pkg/spectastiq_bg.wasm", (_documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === 'SCRIPT' && _documentCurrentScript.src || new URL('spectastiq-bundle.js', document.baseURI).href)))
+        ).arrayBuffer();
+      }
+
       const initWorkers = [];
       for (let i = 0; i < numWorkers; i++) {
         const worker = new WorkerPromise(`fft-worker-${i}`, state);
@@ -2917,18 +2926,28 @@ void main() {
       }
     };
 
+  const cdnScriptOrigin = () => {
+    const spectastiqIsLoadedFromCdn = Array.from(document.getElementsByTagName('script'))
+      .find(el => el.src.startsWith("https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq"));
+    if (spectastiqIsLoadedFromCdn) {
+      const cdnStub = spectastiqIsLoadedFromCdn.src.split("/");
+      cdnStub.pop();
+      return cdnStub.join("/");
+    }
+    return false;
+  };
+
   class WorkerPromise {
     constructor(name) {
       this.name = name;
-      const spectastiqIsLoadedFromCdn = Array.from(document.getElementsByTagName('script'))
-        .some(el => el.src.startsWith("https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq"));
-      if (spectastiqIsLoadedFromCdn) {
+      const remoteScriptOrigin = cdnScriptOrigin();
+      if (remoteScriptOrigin) {
         // Use the bundled/non-module version of the worker using importScripts
         this.worker = this.worker = new Worker(
           URL.createObjectURL(
             new Blob(
               [
-                `importScripts("https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq@v0.9.21/worker-bundle.min.js")`,
+                `importScripts("${remoteScriptOrigin}/worker-bundle.min.js")`,
               ],
               { type: "text/javascript" }
             )),
