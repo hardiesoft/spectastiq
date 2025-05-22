@@ -82,7 +82,6 @@ fn init_console() {
 }
 
 fn blackman_harris_filter(n: f32, samples: f32) -> f32 {
-    // Blackman harris
     const A0: f32 = 0.35875;
     const A1: f32 = 0.48829;
     const A2: f32 = 0.14128;
