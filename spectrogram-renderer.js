@@ -4,9 +4,18 @@ const HEIGHT = FFT_WIDTH / 2; // Height needs to be at half the FFT width.
 const numWorkers = (navigator.hardwareConcurrency || 2) - 1;
 async function initWorkers(state) {
   if (state.workers.length === 0) {
-    const wasm = await (
-      await fetch(new URL("./pkg/spectastiq_bg.wasm", import.meta.url))
-    ).arrayBuffer();
+    const remoteScriptOrigin = cdnScriptOrigin();
+    let wasm;
+    if (remoteScriptOrigin) {
+      wasm = await (
+        await fetch(`${remoteScriptOrigin}/pkg/spectastiq_bg.wasm`)
+      ).arrayBuffer();
+    } else {
+      wasm = await (
+        await fetch(new URL("./pkg/spectastiq_bg.wasm", import.meta.url))
+      ).arrayBuffer();
+    }
+
     const initWorkers = [];
     for (let i = 0; i < numWorkers; i++) {
       const worker = new WorkerPromise(`fft-worker-${i}`, state);
@@ -330,21 +339,28 @@ const renderToContext =
     }
   };
 
+const cdnScriptOrigin = () => {
+  const spectastiqIsLoadedFromCdn = Array.from(document.getElementsByTagName('script'))
+    .find(el => el.src.startsWith("https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq"));
+  if (spectastiqIsLoadedFromCdn) {
+    const cdnStub = spectastiqIsLoadedFromCdn.src.split("/");
+    cdnStub.pop();
+    return cdnStub.join("/");
+  }
+  return false;
+};
+
 class WorkerPromise {
   constructor(name) {
     this.name = name;
-    const spectastiqIsLoadedFromCdn = Array.from(document.getElementsByTagName('script'))
-      .find(el => el.src.startsWith("https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq"));
-    if (spectastiqIsLoadedFromCdn) {
-      const cdnStub = spectastiqIsLoadedFromCdn.src.split("/");
-      cdnStub.pop();
-      cdnStub.push("worker-bundle.min.js");
+    const remoteScriptOrigin = cdnScriptOrigin();
+    if (remoteScriptOrigin) {
       // Use the bundled/non-module version of the worker using importScripts
       this.worker = this.worker = new Worker(
         URL.createObjectURL(
           new Blob(
             [
-              `importScripts("${cdnStub.join('/')}")`,
+              `importScripts("${remoteScriptOrigin}/worker-bundle.min.js")`,
             ],
             { type: "text/javascript" }
           )),
