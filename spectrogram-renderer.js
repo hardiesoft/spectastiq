@@ -1,5 +1,4 @@
 import { init, mapRange } from "./webgl-drawimage.js";
-export const USE_SHARED_ARRAY_BUFFER = true;
 const FFT_WIDTH = 2048;
 const HEIGHT = FFT_WIDTH / 2; // Height needs to be at half the FFT width.
 const numWorkers = (navigator.hardwareConcurrency || 2) - 1;
@@ -77,11 +76,6 @@ const getGainForRegion = (state, minZeroOne, maxZeroOne, minFreqZeroOne, maxFreq
   return globalMax / localMax;
 };
 
-/**
- * @param fileBytes {ArrayBuffer}
- * @param [previousState] {{ workers: WorkerPromise[], offlineAudioContext: OfflineAudioContext }}
- * @returns {Promise<{renderToContext: ((function(CanvasRenderingContext2D, CanvasRenderingContext2D, number, number, number, number, boolean): Promise<*>)|*), audioFileUrl: string, renderRange: (function(number, number, number, boolean): Promise<T>), numAudioSamples: number, terminate: terminate, invalidateCanvasCaches: invalidateCanvasCaches}>}
- */
 export const initSpectrogram = async (fileBytes, previousState) => {
   const state = {
     sharedFloatData: undefined,
@@ -122,7 +116,7 @@ export const initSpectrogram = async (fileBytes, previousState) => {
   }
   const actualFloatData = normalizeAudioBuffer(floatData.subarray(0, actualEnd));
   const audioFloatData = actualFloatData;
-  if (USE_SHARED_ARRAY_BUFFER && window.SharedArrayBuffer) {
+  if (!!window.SharedArrayBuffer) {
     state.sharedFloatData = new Float32Array(
       new SharedArrayBuffer(actualFloatData.byteLength)
     );
@@ -177,11 +171,6 @@ const cyclePalette = (state) => {
   return colorMaps[state.colorMap];
 };
 
-/**
- *
- * @param state
- * @returns {function(number, number, number, boolean): Promise<T>}
- */
 const renderRange =
   (state) => async (startZeroOne, endZeroOne, renderWidth, force) => {
 
@@ -344,12 +333,28 @@ const renderToContext =
 class WorkerPromise {
   constructor(name) {
     this.name = name;
-    this.worker = new Worker(
-      new URL("./spectastiq-worker.js", import.meta.url),
-      { type: "module", credentials: "include" }
-    );
+    const workerUrl = new URL("./worker-bundle.js", import.meta.url);
+    const crossOrigin = workerUrl.toString().includes("://") && !workerUrl.toString().startsWith(location.origin);
+    if (crossOrigin) {
+      // Use the bundled/non-module version of the worker using importScripts
+      this.worker = this.worker = new Worker(
+        URL.createObjectURL(
+          new Blob(
+            [
+              `importScripts("${workerUrl}")`,
+            ],
+            { type: "text/javascript" }
+          )),
+        {type: "classic"}
+      );
+    } else {
+      this.worker = new Worker(
+        new URL("./spectastiq-worker.js", import.meta.url),
+        {type: "module", credentials: "same-origin"}
+      );
+    }
     this.worker.onmessage = ({ data }) => {
-      if ((!USE_SHARED_ARRAY_BUFFER || !window.SharedArrayBuffer) && data.output) {
+      if ((!window.SharedArrayBuffer) && data.output) {
         // Copy outputs back to state.sharedOutputData in the correct offsets
         this.output.subarray(data.offsets.outStart, data.offsets.outEnd).set(data.output, 0);
       }
@@ -405,7 +410,7 @@ async function renderArrayBuffer(
   if (!state.sharedOutputData || widthChanged) {
     if (!state.sharedOutputData || canvasWidth > state.canvasWidth) {
       // Realloc on resize
-      if (USE_SHARED_ARRAY_BUFFER && window.SharedArrayBuffer) {
+      if (!!window.SharedArrayBuffer) {
         state.sharedOutputData = new Float32Array(
           new SharedArrayBuffer(canvasChunkWidth * numChunks * 4 * HEIGHT)
         );
@@ -439,7 +444,7 @@ async function renderArrayBuffer(
       prelude: state.sharedFloatData.subarray(preludeStart, preludeEnd),
       offsets: {outStart, outEnd}
     };
-    if (USE_SHARED_ARRAY_BUFFER && window.SharedArrayBuffer) {
+    if (!!window.SharedArrayBuffer) {
       work.output = state.sharedOutputData.subarray(outStart, outEnd);
     }
     job.push(

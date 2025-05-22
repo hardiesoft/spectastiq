@@ -132,6 +132,9 @@ template.innerHTML = `
     display: flex;                   
     background: lightslategray;
   }
+  #controls.disabled {
+    pointer-events: none;
+  }
   #default-controls {
     padding: 10px;
   }
@@ -439,7 +442,7 @@ export default class Spectastiq extends HTMLElement {
           this.abortController.abort("User aborted");
         }
         this.abortController = new AbortController();
-        this.abortController.signal.addEventListener("onabort", (e) => {
+        this.abortController.signal.addEventListener("onabort", () => {
           this.requestAborted = true;
         });
         const requestInfo = {
@@ -454,6 +457,19 @@ export default class Spectastiq extends HTMLElement {
         let downloadAudioResponse;
         try {
           downloadAudioResponse = await fetch(src, requestInfo);
+
+          if (!this.inited) {
+            // Put this after the fetch otherwise we can never catch it fast enough.
+            // FIXME: Even so, this doesn't fire in chrome for listeners in time.
+            this.shadowRoot.dispatchEvent(
+              new Event("ready", {
+                composed: true,
+                bubbles: false,
+                cancelable: false,
+              })
+            );
+            this.inited = true;
+          }
           const reader = downloadAudioResponse.body.getReader();
           let expectedLength = parseInt(
             downloadAudioResponse.headers.get("Content-Length"),
@@ -1022,6 +1038,7 @@ export default class Spectastiq extends HTMLElement {
       this.progressBar.parentElement.removeChild(this.progressBar);
     }
     const mainPlayheadCanvas = root.getElementById("main-playhead-canvas");
+    const controls = root.getElementById("controls");
     const playButton = root.getElementById("play-button");
 
     this.timelineElements = {
@@ -1060,6 +1077,7 @@ export default class Spectastiq extends HTMLElement {
       }
     };
     overlayCanvas.addEventListener("interaction-begin", () => {
+      controls.classList.add("disabled");
       this.sharedState.interacting = true;
       const startZeroOne = timelineState.left;
       const endZeroOne = timelineState.right;
@@ -1075,6 +1093,7 @@ export default class Spectastiq extends HTMLElement {
       updatePlayhead();
     });
     overlayCanvas.addEventListener("interaction-end", () => {
+      controls.classList.remove("disabled");
       this.sharedState.interacting = false;
       this.render &&
         this.render({ detail: { initialRender: false, force: true } });
@@ -1189,9 +1208,7 @@ export default class Spectastiq extends HTMLElement {
         redrawFrequencyScaleOverlay(timelineState, e.detail.sampleRate);
     });
     overlayCanvas.addEventListener("double-click", async (e) => {
-      console.log("delegate doubleclick?", this.applicationHandlesDoubleClick);
       if (this.applicationHandlesDoubleClick) {
-
         this.shadowRoot.dispatchEvent(new CustomEvent("double-click", {
           detail: e.detail,
           composed: true,
@@ -1298,12 +1315,11 @@ export default class Spectastiq extends HTMLElement {
 
     this.selectRegionOfInterest = async (start, end, min, max) => {
       {
-        const playbackStart = start;
         const centerX = start + (end - start) * 0.5;
-        // Pad region out by an additional 5%.
-        // if (setPlaybackTimeToStartOfRegion) {
-        //   await setPlaybackOffset(playbackStart);
-        // }
+        if (audioState.audioContext.state !== "running") {
+          // If we start zooming to a region before the context is running, things break.
+          await audioState.audioContext.resume();
+        }
         const maxXZoom = getMaxXZoom();
         const pRange = (end - start) * 1.1;
         const paddedRange = Math.max(1 / maxXZoom, pRange);
@@ -1351,14 +1367,12 @@ export default class Spectastiq extends HTMLElement {
 
     this.enterCustomInteractionMode = () => {
       timelineState.customInteractionMode = true;
-      console.log("entering custom interaction mode");
       this.timelineElements.spectrogramContainer.classList.add(
         "custom-interaction-mode"
       );
     };
     this.exitCustomInteractionMode = () => {
       timelineState.customInteractionMode = false;
-      console.log("exiting custom interaction mode");
       this.timelineElements.spectrogramContainer.classList.remove(
         "custom-interaction-mode"
       );
@@ -1481,15 +1495,6 @@ export default class Spectastiq extends HTMLElement {
       this.resizeCanvases(entries[0].contentRect.width, false);
     });
     resizeObserver.observe(container);
-
-    this.inited = true;
-    this.shadowRoot.dispatchEvent(
-      new Event("ready", {
-        composed: true,
-        bubbles: false,
-        cancelable: false,
-      })
-    );
 
     // TODO: Only if we're in the visible viewport, otherwise defer this
 

@@ -1,11 +1,10 @@
 import {initSync, FftContext} from "./pkg/spectastiq.js";
-import {USE_SHARED_ARRAY_BUFFER} from "./spectrogram-renderer.js";
 let fftContext;
 
 let output;
 self.onmessage = async ({data}) => {
   if (data && data.type === "Process") {
-    const useSharedArrayBuffer = USE_SHARED_ARRAY_BUFFER && self.SharedArrayBuffer;
+    const useSharedArrayBuffer = !!self.SharedArrayBuffer;
     let s = performance.now();
     if (!useSharedArrayBuffer) {
       const outputLength = data.offsets.outEnd - data.offsets.outStart;

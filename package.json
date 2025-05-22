@@ -1,6 +1,6 @@
 {
   "name": "spectastiq",
-  "version": "0.9.14",
+  "version": "0.9.2",
   "description": "An interactive spectrogram renderer and audio player, optimised for touch devices.",
   "main": "spectastiq.js",
   "module": "spectastiq.js",
@@ -19,6 +19,8 @@
     "colormaps.js",
     "timeline-wrapper.js",
     "webgl-drawimage.js",
+    "spectastiq-bundle.js",
+    "worker-bundle.js",
     "pkg/",
     "pkg/spectastiq_bg.wasm",
     "pkg/spectastiq_bg.wasm.d.ts",

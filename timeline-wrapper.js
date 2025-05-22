@@ -208,6 +208,9 @@ const onPointerMove = (canvas, state, sharedState) => {
         state.panStarted = false;
       }
     } else if (numPointers === 1) {
+      const scrubLocal = state.scrubLocalStarted;
+      const scrubGlobal = state.scrubGlobalStarted;
+      const isScrubbing = scrubGlobal || scrubLocal;
       if (!state.pinchStarted) {
         let range = state.right - state.left;
         if (state.panStarted) {
@@ -236,15 +239,15 @@ const onPointerMove = (canvas, state, sharedState) => {
           );
           state.startPanXZeroOne = state.left;
           state.initialPanRange = state.right - state.left;
-        } else if (state.scrubLocalStarted || state.scrubGlobalStarted) {
+        } else if (isScrubbing) {
           if (!sharedState.interacting) {
             canvas.dispatchEvent(new Event("interaction-begin"));
           }
           const progress =
             (pointers[0].x - state.scrubDragOffsetX) / canvasWidth;
-          if (state.scrubLocalStarted) {
+          if (scrubLocal) {
             state.dragLocalPlayhead(progress);
-          } else if (state.scrubGlobalStarted) {
+          } else if (scrubGlobal) {
             state.dragGlobalPlayhead(progress);
           }
         } else if (state.panStarted) {
@@ -369,7 +372,6 @@ export const drawTimelineUI =
   (timelineElements, state) => (startZeroOne, endZeroOne, currentAction) => {
     // Draw handles on timelineUICanvas.
     const isDarkTheme = state.isDarkTheme;
-    const c = isDarkTheme ? 255 : 50;
     const ctx = timelineElements.timelineUICanvas.getContext("2d");
     const width = ctx.canvas.width;
     const height = ctx.canvas.height;
@@ -668,6 +670,8 @@ export const initTimeline = (root, sharedState, timelineElements) => {
     drawTimelineUI,
     pointers: {},
     customInteractionMode: false,
+    scrubGlobalStarted: false,
+    scrubLocalStarted: false,
     overLeftHandle: false,
     overRightHandle: false,
     overPanHandle: false,
@@ -746,7 +750,6 @@ export const initTimeline = (root, sharedState, timelineElements) => {
 
   timelineElements.timelineUICanvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
-    e.stopPropagation();
     e.stopImmediatePropagation();
     if (e.pointerType === "mouse" && e.button !== 0) {
       // Only response to left mouse clicks
@@ -799,7 +802,6 @@ export const initTimeline = (root, sharedState, timelineElements) => {
   });
   timelineElements.timelineUICanvas.addEventListener("pointerup", (e) => {
     e.preventDefault();
-    e.stopPropagation();
     e.stopImmediatePropagation();
     if (state.currentAction !== null) {
       switch (state.currentAction) {
@@ -813,7 +815,7 @@ export const initTimeline = (root, sharedState, timelineElements) => {
       }
     }
   });
-  timelineElements.timelineUICanvas.addEventListener("pointerleave", (e) => {
+  timelineElements.timelineUICanvas.addEventListener("pointerleave", () => {
     state.overSeekTrack = false;
     state.overLeftHandle = false;
     state.overRightHandle = false;
@@ -930,7 +932,6 @@ export const initTimeline = (root, sharedState, timelineElements) => {
 
   timelineElements.timelineUICanvas.addEventListener("pointercancel", (e) => {
     e.preventDefault();
-    e.stopPropagation();
     e.stopImmediatePropagation();
     if (state.currentAction !== null) {
       switch (state.currentAction) {
@@ -1053,7 +1054,7 @@ export const initTimeline = (root, sharedState, timelineElements) => {
       }
     }
   });
-  timelineElements.overlayCanvas.addEventListener("pointerleave", (e) => {
+  timelineElements.overlayCanvas.addEventListener("pointerleave", () => {
     state.inGlobalPlaybackScrubberHandle = false;
     state.inLocalPlaybackScrubberHandle = false;
     timelineElements.overlayCanvas.dispatchEvent(
@@ -1063,6 +1064,7 @@ export const initTimeline = (root, sharedState, timelineElements) => {
 
   timelineElements.overlayCanvas.addEventListener("pointermove", (e) => {
     e.preventDefault();
+    e.stopImmediatePropagation();
     if (
       e.pointerType === "touch" ||
       (e.pointerType === "mouse" && e.button !== -1) ||
@@ -1073,7 +1075,6 @@ export const initTimeline = (root, sharedState, timelineElements) => {
         y: e.offsetY,
         time: performance.now(),
       };
-
       if (state.customInteractionMode && state.inCustomInteraction) {
         // Do nothing.
         root.dispatchEvent(
@@ -1107,7 +1108,6 @@ export const initTimeline = (root, sharedState, timelineElements) => {
           new Event("interaction-target-changed")
         );
       }
-
       // NOTE: Re-dispatch mousemove for user/client embed handling.
       root.dispatchEvent(
         new CustomEvent("move", {
@@ -1133,6 +1133,7 @@ export const initTimeline = (root, sharedState, timelineElements) => {
 
   const endPointerInteraction = (e) => {
     e.preventDefault();
+    e.stopImmediatePropagation();
     const maxDoubleClickIntervalMs = 200;
     timelineElements.overlayCanvas.releasePointerCapture(e.pointerId);
     let doubleClickEventEmitted = false;
@@ -1404,6 +1405,7 @@ const animateToRange = async (
       // Smoothly interpolate initialStart to targetStart over a given duration.
       const t = smoothStep(mapRange(tt, startTime, endTime, 0, 1));
       const startT = Math.max(0, initialStart + startRange * t);
+
       const endT = Math.min(1, initialEnd + endRange * t);
       const topT = Math.min(1, initialTop + topRange * t);
       const bottomT = Math.max(0, initialBottom + bottomRange * t);
