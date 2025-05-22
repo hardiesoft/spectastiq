@@ -333,15 +333,18 @@ const renderToContext =
 class WorkerPromise {
   constructor(name) {
     this.name = name;
-    const workerUrl = new URL("./worker-bundle.js", import.meta.url);
-    const crossOrigin = workerUrl.toString().includes("://") && !workerUrl.toString().startsWith(location.origin);
-    if (crossOrigin) {
+    const spectastiqIsLoadedFromCdn = Array.from(document.getElementsByTagName('script'))
+      .find(el => el.src.startsWith("https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq"));
+    if (spectastiqIsLoadedFromCdn) {
+      const cdnStub = spectastiqIsLoadedFromCdn.src.split("/");
+      cdnStub.pop();
+      cdnStub.push("worker-bundle.min.js");
       // Use the bundled/non-module version of the worker using importScripts
       this.worker = this.worker = new Worker(
         URL.createObjectURL(
           new Blob(
             [
-              `importScripts("${workerUrl}")`,
+              `importScripts("${cdnStub.join('/')}")`,
             ],
             { type: "text/javascript" }
           )),

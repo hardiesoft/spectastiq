@@ -2920,15 +2920,15 @@ void main() {
   class WorkerPromise {
     constructor(name) {
       this.name = name;
-      const workerUrl = new URL("./worker-bundle.js", (_documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === 'SCRIPT' && _documentCurrentScript.src || new URL('spectastiq-bundle.js', document.baseURI).href));
-      const crossOrigin = workerUrl.toString().includes("://") && !workerUrl.toString().startsWith(location.origin);
-      if (crossOrigin) {
+      const spectastiqIsLoadedFromCdn = Array.from(document.getElementsByTagName('script'))
+        .some(el => el.src.startsWith("https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq"));
+      if (spectastiqIsLoadedFromCdn) {
         // Use the bundled/non-module version of the worker using importScripts
         this.worker = this.worker = new Worker(
           URL.createObjectURL(
             new Blob(
               [
-                `importScripts("${workerUrl}")`,
+                `importScripts("https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq@v0.9.21/worker-bundle.min.js")`,
               ],
               { type: "text/javascript" }
             )),
