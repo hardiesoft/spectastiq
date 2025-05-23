@@ -1,4 +1,4 @@
-import { mapRange } from "./webgl-drawimage.js";
+import {mapRange} from "./webgl-drawimage.js";
 
 const getMaxXZoom = (canvasWidth, state) => {
   const audioSamples = state.numAudioSamples;
@@ -260,7 +260,7 @@ const onPointerMove = (canvas, state, sharedState) => {
             Math.max(
               0,
               state.startPanXZeroOne -
-                (localLeft - state.initialPinchXLeftZeroOne)
+              (localLeft - state.initialPinchXLeftZeroOne)
             )
           );
           state.right = state.left + state.initialPanRange;
@@ -698,14 +698,14 @@ export const initTimeline = (root, sharedState, timelineElements) => {
       leftResizeLeft = Math.max(
         0,
         state.left -
-          handleWidthZeroOne * 0.5 -
-          (handleWidthZeroOne - panHandleWidth) * 0.5
+        handleWidthZeroOne * 0.5 -
+        (handleWidthZeroOne - panHandleWidth) * 0.5
       );
       rightResizeRight = Math.min(
         1,
         state.right +
-          handleWidthZeroOne * 0.5 +
-          (handleWidthZeroOne - panHandleWidth) * 0.5
+        handleWidthZeroOne * 0.5 +
+        (handleWidthZeroOne - panHandleWidth) * 0.5
       );
     }
     rightResizeLeft = rightResizeRight - handleWidthZeroOne;
@@ -994,7 +994,7 @@ export const initTimeline = (root, sharedState, timelineElements) => {
         };
         timelineElements.overlayCanvas.setPointerCapture(e.pointerId);
       }
-      const { inLocalPlaybackScrubberHandle, inGlobalPlaybackScrubberHandle } =
+      const {inLocalPlaybackScrubberHandle, inGlobalPlaybackScrubberHandle} =
         hitTestScrubHandles(e.offsetX, e.offsetY);
       state.interactionStartX = e.offsetX;
       state.interactionStartY = e.offsetY;
@@ -1102,7 +1102,7 @@ export const initTimeline = (root, sharedState, timelineElements) => {
         }
       }
     } else if (e.pointerType === "mouse" && e.pressure === 0) {
-      const { targetChanged } = hitTestScrubHandles(e.offsetX, e.offsetY);
+      const {targetChanged} = hitTestScrubHandles(e.offsetX, e.offsetY);
       if (targetChanged) {
         timelineElements.overlayCanvas.dispatchEvent(
           new Event("interaction-target-changed")
