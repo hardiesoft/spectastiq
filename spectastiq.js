@@ -1,7 +1,7 @@
-import { initTimeline } from "./timeline-wrapper.js";
-import { initSpectrogram, colorMaps } from "./spectrogram-renderer.js";
-import { initAudio, initAudioPlayer } from "./audio-player.js";
-import { mapRange } from "./webgl-drawimage.js";
+import {initTimeline} from "./timeline-wrapper.js";
+import {colorMaps, initSpectrogram} from "./spectrogram-renderer.js";
+import {initAudio, initAudioPlayer} from "./audio-player.js";
+import {mapRange} from "./webgl-drawimage.js";
 
 const template = document.createElement("template");
 template.innerHTML = `
@@ -128,6 +128,43 @@ template.innerHTML = `
     touch-action: none;
     user-select: none;
   }  
+  #container:not(.audio-loaded) #mini-map, #container:not(.audio-loaded) #canvas-container {
+    pointer-events: none;    
+  }
+  #container:not(.audio-loaded) #spectrogram-container {
+    cursor: default;
+  }
+  .select-user-file, .select-user-file input, .error-message-container {
+    display: none;
+  }
+  #container.no-src .select-user-file, #container.error .error-message-container {   
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;  
+  }
+  .error-message {
+    background: darkred;
+    color: white;
+    font-family: sans-serif;
+    padding: 5px 5px 5px 7px;
+    border-radius: 3px;
+    font-size: 14px;
+    box-shadow: #111 0 2px 3px;
+  }
+  .error-message pre {
+    background: rgba(0, 0, 0, 0.5);
+    display: inline-block;
+    color: #ddd;
+    padding: 3px;
+    margin: 0;
+    font-size: 13px;
+    border-radius: 3px;
+  }
   #controls {   
     display: flex;                   
     background: lightslategray;
@@ -227,6 +264,13 @@ template.innerHTML = `
       <div></div>
       <div></div>
     </div>   
+    <div class="select-user-file">
+      <button class="select-user-file-btn">Open local audio file</button>
+      <input type="file" accept="audio/*" class="select-user-file-input" />
+    </div>
+    <div class="error-message-container">
+      <span class="error-message"></span>
+    </div>
   </div>
   <div id="controls">
     <slot name="player-controls">
@@ -244,11 +288,11 @@ template.innerHTML = `
 export default class Spectastiq extends HTMLElement {
   constructor() {
     super();
-    this.attachShadow({ mode: "open" });
+    this.attachShadow({mode: "open"});
   }
 
   inited = false;
-  sharedState = { interacting: false };
+  sharedState = {interacting: false};
 
   static observedAttributes = [
     "src",
@@ -262,65 +306,60 @@ export default class Spectastiq extends HTMLElement {
   attributeChangedCallback(name, oldValue, newValue) {
     if (this.inited) {
       switch (name) {
-        case "src":
-          {
-            newValue && this.loadSrc(newValue);
-          }
+        case "src": {
+          newValue && this.loadSrc(newValue);
+        }
           break;
-        case "height":
-          {
-            const totalHeight = Number(newValue) || 360;
-            this.timelineHeight = Math.min(60, Math.max(44, totalHeight - 200));
-            this.spectrogramHeight = totalHeight - this.timelineHeight;
-            // Resize.
-            this.resizeCanvases(undefined, false);
-          }
+        case "height": {
+          const totalHeight = Number(newValue) || 360;
+          this.timelineHeight = Math.min(60, Math.max(44, totalHeight - 200));
+          this.spectrogramHeight = totalHeight - this.timelineHeight;
+          // Resize.
+          this.resizeCanvases(undefined, false);
+        }
           break;
-        case "time-scale":
-          {
-            this.drawTimescale = this.timeScale;
-            if (this.drawTimescale) {
-              this.redrawTimescaleOverlay();
-            } else {
-              this.clearTimescaleOverlay();
-            }
+        case "time-scale": {
+          this.drawTimescale = this.timeScale;
+          if (this.drawTimescale) {
+            this.redrawTimescaleOverlay();
+          } else {
+            this.clearTimescaleOverlay();
           }
+        }
           break;
-        case "frequency-scale":
-          {
-            this.drawFrequencyScale = this.frequencyScale;
-            if (this.drawFrequencyScale) {
-              this.redrawFrequencyScaleOverlay();
-            } else {
-              this.clearOverlay();
-            }
-            if (this.drawTimescale) {
-              this.redrawTimescaleOverlay();
-            }
+        case "frequency-scale": {
+          this.drawFrequencyScale = this.frequencyScale;
+          if (this.drawFrequencyScale) {
+            this.redrawFrequencyScaleOverlay();
+          } else {
+            this.clearOverlay();
           }
+          if (this.drawTimescale) {
+            this.redrawTimescaleOverlay();
+          }
+        }
           break;
         case "color-scheme":
-        case "colour-scheme":
-          {
-            if (
-              !colorMaps
-                .map((p) => p.toLowerCase())
-                .includes(newValue.toLowerCase())
-            ) {
-              console.error(
-                `Unknown color scheme: ${newValue}. Allowed schemes are any of '${colorMaps.join(
-                  "', '"
-                )}'`
-              );
-              return;
-            }
-            while (
-              this.nextPalette().toLowerCase() !==
-              this.colorScheme.toLowerCase()
-            ) {
-              // Cycle until we get the desired palette
-            }
+        case "colour-scheme": {
+          if (
+            !colorMaps
+              .map((p) => p.toLowerCase())
+              .includes(newValue.toLowerCase())
+          ) {
+            console.error(
+              `Unknown color scheme: ${newValue}. Allowed schemes are any of '${colorMaps.join(
+                "', '"
+              )}'`
+            );
+            return;
           }
+          while (
+            this.nextPalette().toLowerCase() !==
+            this.colorScheme.toLowerCase()
+            ) {
+            // Cycle until we get the desired palette
+          }
+        }
           break;
       }
     }
@@ -344,6 +383,7 @@ export default class Spectastiq extends HTMLElement {
   get src() {
     return this.getAttribute("src");
   }
+
   set src(newValue) {
     this.setAttribute("src", newValue);
   }
@@ -351,6 +391,7 @@ export default class Spectastiq extends HTMLElement {
   get height() {
     return this.getAttribute("height");
   }
+
   set height(newValue) {
     this.setAttribute("height", newValue);
   }
@@ -362,6 +403,7 @@ export default class Spectastiq extends HTMLElement {
     }
     return false;
   }
+
   set timeScale(newValue) {
     this.setAttribute("time-scale", newValue);
   }
@@ -373,18 +415,22 @@ export default class Spectastiq extends HTMLElement {
     }
     return false;
   }
+
   set frequencyScale(newValue) {
     this.setAttribute("frequency-scale", newValue);
   }
+
   get colorScheme() {
     return (
       this.getAttribute("color-scheme") || this.getAttribute("colour-scheme")
     );
   }
+
   set colorScheme(newValue) {
     // TODO: Make sure it's an allowed colour scheme, otherwise throw a warning.
     this.setAttribute("color-scheme", newValue);
   }
+
   set colourScheme(newValue) {
     // TODO: Make sure it's an allowed colour scheme, otherwise throw a warning.
     this.setAttribute("color-scheme", newValue);
@@ -408,8 +454,8 @@ export default class Spectastiq extends HTMLElement {
         console.error(`Malformed JSON passed for request headers: ${e}`);
       }
     }
-    const { drawTimelineUI, timelineState, setInitialZoom } = this.timeline;
-    const { audioState, updatePlayhead } = this.audioPlayer;
+    const {drawTimelineUI, timelineState, setInitialZoom} = this.timeline;
+    const {audioState, updatePlayhead} = this.audioPlayer;
     const canvas = this.timelineElements.canvas;
     const mapCtx = this.timelineElements.mapCanvas.getContext("webgl2");
     const ctx = canvas.getContext("webgl2");
@@ -457,489 +503,412 @@ export default class Spectastiq extends HTMLElement {
         let downloadAudioResponse;
         try {
           downloadAudioResponse = await fetch(src, requestInfo);
-
-          if (!this.inited) {
-            // Put this after the fetch otherwise we can never catch it fast enough.
-            // FIXME: Even so, this doesn't fire in chrome for listeners in time.
-            this.shadowRoot.dispatchEvent(
-              new Event("ready", {
-                composed: true,
-                bubbles: false,
-                cancelable: false,
-              })
-            );
-            this.inited = true;
-          }
-          const reader = downloadAudioResponse.body.getReader();
-          let expectedLength = parseInt(
-            downloadAudioResponse.headers.get("Content-Length"),
-            10
-          );
-          if (isNaN(expectedLength)) {
-            expectedLength = parseInt(
-              downloadAudioResponse.headers.get("Fallback-Content-Length"),
+          if (!downloadAudioResponse.ok) {
+            this.showErrorMessage(`Audio file not found <pre>${src}</pre>`);
+          } else {
+            if (!this.inited) {
+              // Put this after the fetch otherwise we can never catch it fast enough.
+              // FIXME: Even so, this doesn't fire in chrome for listeners in time.
+              this.shadowRoot.dispatchEvent(
+                new Event("ready", {
+                  composed: true,
+                  bubbles: false,
+                  cancelable: false,
+                })
+              );
+              this.inited = true;
+            }
+            const reader = downloadAudioResponse.body.getReader();
+            let expectedLength = parseInt(
+              downloadAudioResponse.headers.get("Content-Length"),
               10
             );
-          }
-          if (!isNaN(expectedLength)) {
-            if (!this.progressBar.parentElement) {
-              this.timelineElements.spectrogramContainer.appendChild(
-                this.progressBar
+            if (isNaN(expectedLength)) {
+              expectedLength = parseInt(
+                downloadAudioResponse.headers.get("Fallback-Content-Length"),
+                10
               );
             }
-          }
-          while (!this.requestAborted) {
-            const { done, value } = await reader.read();
-            if (done) {
-              break;
-            }
-            chunks.push(value);
-            receivedLength += value.length;
             if (!isNaN(expectedLength)) {
-              const progress = receivedLength / expectedLength;
-              this.progressBar.setAttribute("value", String(progress * 100));
-              if (progress === 1) {
-                if (this.progressBar.parentElement) {
-                  this.progressBar.parentElement.removeChild(this.progressBar);
-                }
-              }
-            }
-          }
-          const fileBytesReceived = new Uint8Array(receivedLength);
-          let position = 0;
-          for (const chunk of chunks) {
-            fileBytesReceived.set(chunk, position);
-            position += chunk.length;
-          }
-          fileBytes = fileBytesReceived.buffer;
-          const {
-            renderRange,
-            renderToContext,
-            audioFloatData,
-            invalidateCanvasCaches,
-            terminateWorkers,
-            cyclePalette,
-            getGainForRegion,
-            persistentSpectrogramState,
-          } = await initSpectrogram(
-            fileBytes,
-            this.persistentSpectrogramState || null
-          );
-          this.getGainForRegionOfInterest = getGainForRegion;
-          timelineState.numAudioSamples = audioFloatData.length;
-          timelineState.left = 0;
-          timelineState.top = 1;
-          timelineState.bottom = 0;
-          timelineState.right = 1;
-          timelineState.zoomX = 1;
-          timelineState.pinchStarted = false;
-          timelineState.panStarted = false;
-          timelineState.initialPinchXLeftZeroOne = 0;
-          timelineState.initialPinchXRightZeroOne = 1;
-          timelineState.currentAction = null;
-          audioState.followPlayhead = false;
-          audioState.audioProgressZeroOne = 0;
-          audioState.playbackStartOffset = 0;
-          audioState.audioProgressSampleTime = performance.now();
-          audioState.wasPlaying = false;
-          audioState.playheadStartOffsetXZeroOne = 0;
-          audioState.playheadDragOffsetX = 0;
-          audioState.mainPlayheadStartOffsetXZeroOne = 0
-          audioState.mainPlayheadDragOffsetX = 0;
-          audioState.dragPlayheadRaf = 0;
-          audioState.playheadWasInRangeWhenPlaybackStarted = false;
-
-          this.persistentSpectrogramState = persistentSpectrogramState;
-          this.terminateWorkers = terminateWorkers;
-          this.invalidateCanvasCaches = invalidateCanvasCaches;
-          this.renderRange = renderRange;
-
-          const defaultPalette = "Viridis";
-          // Select starting palette
-          let palette = this.colorScheme || defaultPalette;
-          if (
-            !colorMaps
-              .map((p) => p.toLowerCase())
-              .includes(palette.toLowerCase())
-          ) {
-            console.error(
-              `Unknown color scheme: ${palette}. Allowed schemes are any of '${colorMaps.join(
-                "', '"
-              )}'`
-            );
-            palette = defaultPalette;
-          }
-          let paletteChangeTimeout;
-          this.nextPalette = () => {
-            this.clearOverlay();
-            const nextPalette = cyclePalette();
-            // Give downstream renderers a moment to adjust to palette changes;
-            clearTimeout(paletteChangeTimeout);
-            paletteChangeTimeout = setTimeout(() => {
-              timelineState.isDarkTheme = nextPalette !== "Grayscale";
-              const startZeroOne = timelineState.left;
-              const endZeroOne = timelineState.right;
-              const top = timelineState.top;
-              const bottom = timelineState.bottom;
-              drawTimelineUI(
-                startZeroOne,
-                endZeroOne,
-                timelineState.currentAction
-              );
-              renderToContext(ctx, startZeroOne, endZeroOne, top, bottom);
-              renderToContext(mapCtx, 0, 1, 1, 0);
-              audioState.progressSampleTime = performance.now();
-              updatePlayhead();
-              if (this.actualSampleRate) {
-                if (this.drawFrequencyScale) {
-                  this.redrawFrequencyScaleOverlay();
-                } else {
-                  this.clearOverlay();
-                }
-              }
-            }, 10);
-            return nextPalette;
-          };
-          while (this.nextPalette().toLowerCase() !== palette.toLowerCase()) {
-            // Cycle until we get the desired palette
-          }
-          this.transformY = (y) => {
-            const top = timelineState.top;
-            const bottom = timelineState.bottom;
-            // Is the incoming y within the clampedRangeY?
-            const maxYZoom =
-              (TEXTURE_HEIGHT / (canvas.height / window.devicePixelRatio)) *
-              MAX_ZOOMED_REGION;
-            const rangeY = top - bottom;
-            const minRangeY =
-              1 / (TEXTURE_HEIGHT / (canvas.height / window.devicePixelRatio));
-
-            // The input height of the selected region.
-            const clampedRangeY = Math.max(rangeY, minRangeY);
-            const posY = bottom / Math.max(0.000001, 1 - rangeY);
-            const rem = 1 - clampedRangeY;
-            const inBottom = rem * posY;
-            const inTop = inBottom + clampedRangeY;
-
-            const mMaxZoom = map(clampedRangeY, 1, minRangeY, 1, 1 / maxYZoom);
-            const actualHeight = clampedRangeY * (1 / mMaxZoom);
-            const remainder = 1 - actualHeight;
-            const selectedBottom = remainder * posY;
-            const selectedTop = selectedBottom + actualHeight;
-
-            const aboveRange = y > inTop;
-            const belowRange = y < inBottom;
-            const inRange = y <= inTop && y >= inBottom;
-            if (inRange) {
-              y = map(y, inBottom, inTop, selectedBottom, selectedTop);
-            } else if (belowRange) {
-              y = map(y, 0, inBottom, 0, selectedBottom);
-            } else if (aboveRange) {
-              y = map(y, inTop, 1.0, selectedTop, 1.0);
-            }
-            return y;
-          };
-          this.inverseTransformY = (yZeroOne) => {
-            // How much to crop of the top and bottom of the spectrogram (used if the sample rate of the audio was different
-            // from the sample rate the FFT was performed at, since that leaves a blank space at the top)
-            let y = 1 - Math.min(1, Math.max(0, yZeroOne));
-            const top = timelineState.top;
-            const bottom = timelineState.bottom;
-            const maxZoom =
-              1024 / (this.timelineElements.canvas.height / devicePixelRatio);
-            const maxYZoom = maxZoom * 0.8;
-            const minRangeY = 1.0 / maxZoom;
-            const rangeY = top - bottom;
-            const clampedRangeY = Math.max(rangeY, minRangeY);
-            // Prevent divide by zero
-            const posY = bottom / Math.max(0.000001, 1.0 - rangeY);
-            const mMaxZoom = map(
-              clampedRangeY,
-              1.0,
-              minRangeY,
-              1.0,
-              1.0 / maxYZoom
-            );
-            const actualHeight = clampedRangeY * (1.0 / mMaxZoom);
-            const remainder = 1.0 - actualHeight;
-            const selectedBottom = remainder * posY;
-            const selectedTop = selectedBottom + actualHeight;
-            const aboveRange = y > selectedTop;
-            const belowRange = y < selectedBottom;
-            const inRange = y <= selectedTop && y >= selectedBottom;
-
-            if (inRange) {
-              y = map(y, selectedBottom, selectedTop, bottom, top);
-            } else if (belowRange) {
-              y = map(y, 0.0, selectedBottom, 0.0, bottom);
-            } else if (aboveRange) {
-              y = map(y, selectedTop, 1.0, top, 1.0);
-            }
-            return y;
-          };
-          let cropAmountTop = 0;
-          const clampZeroOne = (x) => Math.max(0, Math.min(1, x));
-          const redrawTimescaleOverlay = (
-            ctx,
-            startZeroOne,
-            endZeroOne,
-            duration
-          ) => {
-            ctx.save();
-            // Draw a notch every ~second
-            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-            const startTime = startZeroOne * duration;
-            const endTime = endZeroOne * duration;
-            const startSeconds = Math.floor(startTime);
-            const endSeconds = Math.ceil(endTime);
-            const zoomLevel = endZeroOne - startZeroOne;
-
-            //const distanceBetweenSecondNotches = (startZeroOne + 1) / duration * ctx.canvas.width / devicePixelRatio;
-
-            // TODO: Fade between.  I guess we want a good way of generalising this pattern of having features fade in at
-            //  various zoom levels.  Maybe show every 10 seconds, then every 5, then every 2, then every 1
-
-            //console.log("distanceBetweenSecondNotches", distanceBetweenSecondNotches, drawEveryOtherSecond);
-            const tenPx = 10 * devicePixelRatio;
-            ctx.font = `${tenPx}px sans-serif`;
-            ctx.textAlign = "center";
-            let xOpacity = 0.5;
-            let pX = 0;
-            for (let i = startSeconds; i < endSeconds; i += 1) {
-              const oX =
-                mapRange(i / duration, startZeroOne, endZeroOne, 0, 1) *
-                ctx.canvas.width;
-              const distanceBetweenSecondNotches = oX - pX;
-              pX = oX;
-              if (i !== 0) {
-                if (this.drawFrequencyScale) {
-                  xOpacity = Math.min(
-                    0.5,
-                    clampZeroOne(
-                      mapRange(
-                        oX,
-                        ctx.canvas.width - tenPx * 10,
-                        ctx.canvas.width,
-                        0.5,
-                        0
-                      )
-                    )
-                  );
-                }
-                ctx.fillStyle = `rgba(255, 255, 255, ${xOpacity})`;
-                ctx.fillRect(oX, 0, 1, ctx.canvas.height / 2);
-                const minDistanceBetweenSecondNotches = 15 * devicePixelRatio;
-                // TODO: Generalise this
-
-                // Don't draw labels too close together.
-                const isOdd = i % 2 === 1;
-                if (!isOdd) {
-                  const distance = Math.min(
-                    30 * devicePixelRatio,
-                    distanceBetweenSecondNotches
-                  );
-                  const opacity = clampZeroOne(
-                    mapRange(
-                      distance,
-                      15 * devicePixelRatio,
-                      30 * devicePixelRatio,
-                      0,
-                      1
-                    )
-                  );
-                  ctx.fillStyle = `rgba(255, 255, 255, ${xOpacity * opacity})`;
-                }
-                // TODO: For clips longer than a minute, should have 1m35s notation?
-                if (oX + tenPx < ctx.canvas.width) {
-                  ctx.fillText(`${i}s`, oX, ctx.canvas.height / 2 + tenPx);
-                }
-              }
-              // TODO: Spacing and zoom level of elements should also be proportionate to how close together they are
-              //  because of audio duration.
-              const opacity = clampZeroOne(
-                mapRange(1 - zoomLevel, 0.25, 1, 0, 1)
-              );
-              if (opacity > 0) {
-                ctx.fillStyle = `rgba(255, 255, 255, ${opacity * xOpacity})`;
-                for (let j = 1; j < 10; j += 1) {
-                  const oX =
-                    mapRange(
-                      (i + 0.1 * j) / duration,
-                      startZeroOne,
-                      endZeroOne,
-                      0,
-                      1
-                    ) * ctx.canvas.width;
-                  let h = ctx.canvas.height / 3;
-                  if (j === 5) {
-                    h += 5 * devicePixelRatio;
-                  }
-                  ctx.fillRect(oX, 0, 1, h);
-                }
-              }
-            }
-
-            // for (let i = startSeconds; i < endSeconds; i += 1) {
-            //   const offsetX = ((i / duration)) * ctx.canvas.width;
-            //   console.log(i, offsetX);
-            //   ctx.fillRect(offsetX, 0, 1, ctx.canvas.height);
-            //
-            // }
-
-            ctx.restore();
-          };
-          this.redrawTimescaleOverlay = () =>
-            redrawTimescaleOverlay(
-              timescaleOverlayContext,
-              timelineState.left,
-              timelineState.right,
-              audioState.audioDuration
-            );
-          this.clearTimescaleOverlay = () => {
-            timescaleOverlayContext.save();
-            timescaleOverlayContext.clearRect(
-              0,
-              0,
-              ctx.canvas.width,
-              ctx.canvas.height
-            );
-          };
-
-          this.render = ({ detail: { initialRender, force } }) => {
-            if (this.raf) {
-              cancelAnimationFrame(this.raf);
-              this.raf = undefined;
-            }
-            this.raf = requestAnimationFrame(() => {
-              const startZeroOne = timelineState.left;
-              const endZeroOne = timelineState.right;
-              const top = timelineState.top;
-              const bottom = timelineState.bottom;
-              if (
-                (this.deferredWidth &&
-                  ctx.canvas.width !== this.deferredWidth) ||
-                (this.deferredHeight &&
-                  ctx.canvas.height !== this.deferredHeight)
-              ) {
-                this.resizeCanvases(this.deferredWidth, true);
-                this.timelineElements.container.classList.remove("disabled");
-              } else if (
-                this.deferredWidth &&
-                ctx.canvas.width === this.deferredWidth &&
-                this.deferredHeight &&
-                ctx.canvas.height === this.deferredHeight
-              ) {
-                this.timelineElements.container.classList.remove("disabled");
-              }
-
-              drawTimelineUI(
-                startZeroOne,
-                endZeroOne,
-                timelineState.currentAction
-              );
-              if (!audioState.playing) {
-                audioState.progressSampleTime = performance.now();
-                updatePlayhead();
-              }
-
-              // TODO: Move somewhere sensible
-              this.drawTimescale = this.timeScale;
-              this.drawFrequencyScale = this.frequencyScale;
-              if (this.drawTimescale) {
-                redrawTimescaleOverlay(
-                  timescaleOverlayContext,
-                  startZeroOne,
-                  endZeroOne,
-                  audioState.audioDuration
+              if (!this.progressBar.parentElement) {
+                this.timelineElements.spectrogramContainer.appendChild(
+                  this.progressBar
                 );
               }
-
-              // Render the stretched version
-              renderToContext(ctx, startZeroOne, endZeroOne, top, bottom).then(
-                (s) => {
-                  if (!!s) {
-                    this.shadowRoot.dispatchEvent(
-                      new CustomEvent("render", {
-                        bubbles: false,
-                        composed: true,
-                        cancelable: false,
-                        detail: {
-                          range: {
-                            begin: startZeroOne,
-                            end: endZeroOne,
-                            min: bottom,
-                            max: top,
-                          },
-                          context: userOverlayCtx,
-                        },
-                      })
-                    );
+            }
+            while (!this.requestAborted) {
+              const {done, value} = await reader.read();
+              if (done) {
+                break;
+              }
+              chunks.push(value);
+              receivedLength += value.length;
+              if (!isNaN(expectedLength)) {
+                const progress = receivedLength / expectedLength;
+                this.progressBar.setAttribute("value", String(progress * 100));
+                if (progress === 1) {
+                  if (this.progressBar.parentElement) {
+                    this.progressBar.parentElement.removeChild(this.progressBar);
                   }
                 }
-              );
-              if (initialRender) {
-                renderToContext(mapCtx, 0, 1, 1, 0);
               }
-              if (!this.sharedState.interacting || initialRender) {
-                // Render the fine detail of the zoom level and then fill it in when available.
-                renderRange(startZeroOne, endZeroOne, canvas.width, force).then(
-                  (rangeCropInfo) => {
-                    if (rangeCropInfo && rangeCropInfo.cropAmountTop) {
-                      cropAmountTop = rangeCropInfo.cropAmountTop;
-                      this.actualSampleRate = rangeCropInfo.actualSampleRate;
-                    }
-                    if (initialRender) {
-                      renderToContext(mapCtx, 0, 1, 1, 0).then(() => {
-                        if (
-                          this.loadingSpinner &&
-                          this.loadingSpinner.parentElement
-                        ) {
-                          this.loadingSpinner.parentElement.removeChild(
-                            this.loadingSpinner
-                          );
-                          this.playerElements.playButton.removeAttribute(
-                            "disabled"
-                          );
+            }
+            const fileBytesReceived = new Uint8Array(receivedLength);
+            let position = 0;
+            for (const chunk of chunks) {
+              fileBytesReceived.set(chunk, position);
+              position += chunk.length;
+            }
+            fileBytes = fileBytesReceived.buffer;
+            const spectrogramInited = await initSpectrogram(
+              fileBytes,
+              this.persistentSpectrogramState || null
+            );
+            if (spectrogramInited.error) {
+              this.showErrorMessage(`${spectrogramInited.error} for <pre>${this.localSrc || src}</pre>`);
+            } else {
+              const {
+                renderRange,
+                renderToContext,
+                audioFloatData,
+                invalidateCanvasCaches,
+                terminateWorkers,
+                cyclePalette,
+                getGainForRegion,
+                persistentSpectrogramState,
+              } = spectrogramInited;
+              this.getGainForRegionOfInterest = getGainForRegion;
+              timelineState.numAudioSamples = audioFloatData.length;
+              timelineState.left = 0;
+              timelineState.top = 1;
+              timelineState.bottom = 0;
+              timelineState.right = 1;
+              timelineState.zoomX = 1;
+              timelineState.pinchStarted = false;
+              timelineState.panStarted = false;
+              timelineState.initialPinchXLeftZeroOne = 0;
+              timelineState.initialPinchXRightZeroOne = 1;
+              timelineState.currentAction = null;
+              audioState.followPlayhead = false;
+              audioState.audioProgressZeroOne = 0;
+              audioState.playbackStartOffset = 0;
+              audioState.audioProgressSampleTime = performance.now();
+              audioState.wasPlaying = false;
+              audioState.playheadStartOffsetXZeroOne = 0;
+              audioState.playheadDragOffsetX = 0;
+              audioState.mainPlayheadStartOffsetXZeroOne = 0
+              audioState.mainPlayheadDragOffsetX = 0;
+              audioState.dragPlayheadRaf = 0;
+              audioState.playheadWasInRangeWhenPlaybackStarted = false;
 
-                          this.shadowRoot.dispatchEvent(
-                            new CustomEvent("audio-loaded", {
-                              composed: true,
-                              bubbles: false,
-                              cancelable: false,
-                              detail: {
-                                sampleRate: this.actualSampleRate,
-                                duration: audioState.audioDuration,
-                              },
-                            })
-                          );
-                          this.endLoad();
-                        }
-                      });
+              this.persistentSpectrogramState = persistentSpectrogramState;
+              this.terminateWorkers = terminateWorkers;
+              this.invalidateCanvasCaches = invalidateCanvasCaches;
+              this.renderRange = renderRange;
+
+              const defaultPalette = "Viridis";
+              // Select starting palette
+              let palette = this.colorScheme || defaultPalette;
+              if (
+                !colorMaps
+                  .map((p) => p.toLowerCase())
+                  .includes(palette.toLowerCase())
+              ) {
+                console.error(
+                  `Unknown color scheme: ${palette}. Allowed schemes are any of '${colorMaps.join(
+                    "', '"
+                  )}'`
+                );
+                palette = defaultPalette;
+              }
+              let paletteChangeTimeout;
+              this.nextPalette = () => {
+                this.clearOverlay();
+                const nextPalette = cyclePalette();
+                // Give downstream renderers a moment to adjust to palette changes;
+                clearTimeout(paletteChangeTimeout);
+                paletteChangeTimeout = setTimeout(() => {
+                  timelineState.isDarkTheme = nextPalette !== "Grayscale";
+                  const startZeroOne = timelineState.left;
+                  const endZeroOne = timelineState.right;
+                  const top = timelineState.top;
+                  const bottom = timelineState.bottom;
+                  drawTimelineUI(
+                    startZeroOne,
+                    endZeroOne,
+                    timelineState.currentAction
+                  );
+                  renderToContext(ctx, startZeroOne, endZeroOne, top, bottom);
+                  renderToContext(mapCtx, 0, 1, 1, 0);
+                  audioState.progressSampleTime = performance.now();
+                  updatePlayhead();
+                  if (this.actualSampleRate) {
+                    if (this.drawFrequencyScale) {
+                      this.redrawFrequencyScaleOverlay();
+                    } else {
+                      this.clearOverlay();
                     }
-                    renderToContext(
-                      ctx,
-                      timelineState.left,
-                      timelineState.right,
-                      top,
-                      bottom
-                    ).then((s) => {
-                      if (
-                        initialRender &&
-                        startTimeOffset !== 0 &&
-                        endTimeOffset !== 1
-                      ) {
-                        // NOTE: If we're doing an initial render at a zoomed in portion, we need to make sure we create
-                        //  the full range image first.
-                        setInitialZoom(
-                          startTimeOffset,
-                          endTimeOffset,
-                          1,
+                  }
+                }, 10);
+                return nextPalette;
+              };
+              while (this.nextPalette().toLowerCase() !== palette.toLowerCase()) {
+                // Cycle until we get the desired palette
+              }
+              this.transformY = (y) => {
+                const top = timelineState.top;
+                const bottom = timelineState.bottom;
+                // Is the incoming y within the clampedRangeY?
+                const maxYZoom =
+                  (TEXTURE_HEIGHT / (canvas.height / window.devicePixelRatio)) *
+                  MAX_ZOOMED_REGION;
+                const rangeY = top - bottom;
+                const minRangeY =
+                  1 / (TEXTURE_HEIGHT / (canvas.height / window.devicePixelRatio));
+
+                // The input height of the selected region.
+                const clampedRangeY = Math.max(rangeY, minRangeY);
+                const posY = bottom / Math.max(0.000001, 1 - rangeY);
+                const rem = 1 - clampedRangeY;
+                const inBottom = rem * posY;
+                const inTop = inBottom + clampedRangeY;
+
+                const mMaxZoom = map(clampedRangeY, 1, minRangeY, 1, 1 / maxYZoom);
+                const actualHeight = clampedRangeY * (1 / mMaxZoom);
+                const remainder = 1 - actualHeight;
+                const selectedBottom = remainder * posY;
+                const selectedTop = selectedBottom + actualHeight;
+
+                const aboveRange = y > inTop;
+                const belowRange = y < inBottom;
+                const inRange = y <= inTop && y >= inBottom;
+                if (inRange) {
+                  y = map(y, inBottom, inTop, selectedBottom, selectedTop);
+                } else if (belowRange) {
+                  y = map(y, 0, inBottom, 0, selectedBottom);
+                } else if (aboveRange) {
+                  y = map(y, inTop, 1.0, selectedTop, 1.0);
+                }
+                return y;
+              };
+              this.inverseTransformY = (yZeroOne) => {
+                // How much to crop of the top and bottom of the spectrogram (used if the sample rate of the audio was different
+                // from the sample rate the FFT was performed at, since that leaves a blank space at the top)
+                let y = 1 - Math.min(1, Math.max(0, yZeroOne));
+                const top = timelineState.top;
+                const bottom = timelineState.bottom;
+                const maxZoom =
+                  1024 / (this.timelineElements.canvas.height / devicePixelRatio);
+                const maxYZoom = maxZoom * 0.8;
+                const minRangeY = 1.0 / maxZoom;
+                const rangeY = top - bottom;
+                const clampedRangeY = Math.max(rangeY, minRangeY);
+                // Prevent divide by zero
+                const posY = bottom / Math.max(0.000001, 1.0 - rangeY);
+                const mMaxZoom = map(
+                  clampedRangeY,
+                  1.0,
+                  minRangeY,
+                  1.0,
+                  1.0 / maxYZoom
+                );
+                const actualHeight = clampedRangeY * (1.0 / mMaxZoom);
+                const remainder = 1.0 - actualHeight;
+                const selectedBottom = remainder * posY;
+                const selectedTop = selectedBottom + actualHeight;
+                const aboveRange = y > selectedTop;
+                const belowRange = y < selectedBottom;
+                const inRange = y <= selectedTop && y >= selectedBottom;
+
+                if (inRange) {
+                  y = map(y, selectedBottom, selectedTop, bottom, top);
+                } else if (belowRange) {
+                  y = map(y, 0.0, selectedBottom, 0.0, bottom);
+                } else if (aboveRange) {
+                  y = map(y, selectedTop, 1.0, top, 1.0);
+                }
+                return y;
+              };
+              let cropAmountTop = 0;
+              const clampZeroOne = (x) => Math.max(0, Math.min(1, x));
+              const redrawTimescaleOverlay = (
+                ctx,
+                startZeroOne,
+                endZeroOne,
+                duration
+              ) => {
+                ctx.save();
+                // Draw a notch every ~second
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                const startTime = startZeroOne * duration;
+                const endTime = endZeroOne * duration;
+                const startSeconds = Math.floor(startTime);
+                const endSeconds = Math.ceil(endTime);
+                const zoomLevel = endZeroOne - startZeroOne;
+
+                //const distanceBetweenSecondNotches = (startZeroOne + 1) / duration * ctx.canvas.width / devicePixelRatio;
+
+                // TODO: Fade between.  I guess we want a good way of generalising this pattern of having features fade in at
+                //  various zoom levels.  Maybe show every 10 seconds, then every 5, then every 2, then every 1
+
+                //console.log("distanceBetweenSecondNotches", distanceBetweenSecondNotches, drawEveryOtherSecond);
+                const tenPx = 10 * devicePixelRatio;
+                ctx.font = `${tenPx}px sans-serif`;
+                ctx.textAlign = "center";
+                let xOpacity = 0.5;
+                let pX = 0;
+                for (let i = startSeconds; i < endSeconds; i += 1) {
+                  const oX =
+                    mapRange(i / duration, startZeroOne, endZeroOne, 0, 1) *
+                    ctx.canvas.width;
+                  const distanceBetweenSecondNotches = oX - pX;
+                  pX = oX;
+                  if (i !== 0) {
+                    if (this.drawFrequencyScale) {
+                      xOpacity = Math.min(
+                        0.5,
+                        clampZeroOne(
+                          mapRange(
+                            oX,
+                            ctx.canvas.width - tenPx * 10,
+                            ctx.canvas.width,
+                            0.5,
+                            0
+                          )
+                        )
+                      );
+                    }
+                    ctx.fillStyle = `rgba(255, 255, 255, ${xOpacity})`;
+                    ctx.fillRect(oX, 0, 1, ctx.canvas.height / 2);
+                    const minDistanceBetweenSecondNotches = 15 * devicePixelRatio;
+                    // TODO: Generalise this
+
+                    // Don't draw labels too close together.
+                    const isOdd = i % 2 === 1;
+                    if (!isOdd) {
+                      const distance = Math.min(
+                        30 * devicePixelRatio,
+                        distanceBetweenSecondNotches
+                      );
+                      const opacity = clampZeroOne(
+                        mapRange(
+                          distance,
+                          15 * devicePixelRatio,
+                          30 * devicePixelRatio,
                           0,
-                          initialRender,
-                          true
-                        );
+                          1
+                        )
+                      );
+                      ctx.fillStyle = `rgba(255, 255, 255, ${xOpacity * opacity})`;
+                    }
+                    // TODO: For clips longer than a minute, should have 1m35s notation?
+                    if (oX + tenPx < ctx.canvas.width) {
+                      ctx.fillText(`${i}s`, oX, ctx.canvas.height / 2 + tenPx);
+                    }
+                  }
+                  // TODO: Spacing and zoom level of elements should also be proportionate to how close together they are
+                  //  because of audio duration.
+                  const opacity = clampZeroOne(
+                    mapRange(1 - zoomLevel, 0.25, 1, 0, 1)
+                  );
+                  if (opacity > 0) {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${opacity * xOpacity})`;
+                    for (let j = 1; j < 10; j += 1) {
+                      const oX =
+                        mapRange(
+                          (i + 0.1 * j) / duration,
+                          startZeroOne,
+                          endZeroOne,
+                          0,
+                          1
+                        ) * ctx.canvas.width;
+                      let h = ctx.canvas.height / 3;
+                      if (j === 5) {
+                        h += 5 * devicePixelRatio;
                       }
+                      ctx.fillRect(oX, 0, 1, h);
+                    }
+                  }
+                }
 
+                // for (let i = startSeconds; i < endSeconds; i += 1) {
+                //   const offsetX = ((i / duration)) * ctx.canvas.width;
+                //   console.log(i, offsetX);
+                //   ctx.fillRect(offsetX, 0, 1, ctx.canvas.height);
+                //
+                // }
+
+                ctx.restore();
+              };
+              this.redrawTimescaleOverlay = () =>
+                redrawTimescaleOverlay(
+                  timescaleOverlayContext,
+                  timelineState.left,
+                  timelineState.right,
+                  audioState.audioDuration
+                );
+              this.clearTimescaleOverlay = () => {
+                timescaleOverlayContext.save();
+                timescaleOverlayContext.clearRect(
+                  0,
+                  0,
+                  ctx.canvas.width,
+                  ctx.canvas.height
+                );
+              };
+
+              this.render = ({detail: {initialRender, force}}) => {
+                if (this.raf) {
+                  cancelAnimationFrame(this.raf);
+                  this.raf = undefined;
+                }
+                this.raf = requestAnimationFrame(() => {
+                  const startZeroOne = timelineState.left;
+                  const endZeroOne = timelineState.right;
+                  const top = timelineState.top;
+                  const bottom = timelineState.bottom;
+                  if (
+                    (this.deferredWidth &&
+                      ctx.canvas.width !== this.deferredWidth) ||
+                    (this.deferredHeight &&
+                      ctx.canvas.height !== this.deferredHeight)
+                  ) {
+                    this.resizeCanvases(this.deferredWidth, true);
+                    this.timelineElements.container.classList.remove("disabled");
+                  } else if (
+                    this.deferredWidth &&
+                    ctx.canvas.width === this.deferredWidth &&
+                    this.deferredHeight &&
+                    ctx.canvas.height === this.deferredHeight
+                  ) {
+                    this.timelineElements.container.classList.remove("disabled");
+                  }
+
+                  drawTimelineUI(
+                    startZeroOne,
+                    endZeroOne,
+                    timelineState.currentAction
+                  );
+                  if (!audioState.playing) {
+                    audioState.progressSampleTime = performance.now();
+                    updatePlayhead();
+                  }
+
+                  // TODO: Move somewhere sensible
+                  this.drawTimescale = this.timeScale;
+                  this.drawFrequencyScale = this.frequencyScale;
+                  if (this.drawTimescale) {
+                    redrawTimescaleOverlay(
+                      timescaleOverlayContext,
+                      startZeroOne,
+                      endZeroOne,
+                      audioState.audioDuration
+                    );
+                  }
+
+                  // Render the stretched version
+                  renderToContext(ctx, startZeroOne, endZeroOne, top, bottom).then(
+                    (s) => {
                       if (!!s) {
                         this.shadowRoot.dispatchEvent(
                           new CustomEvent("render", {
@@ -958,27 +927,111 @@ export default class Spectastiq extends HTMLElement {
                           })
                         );
                       }
-                    });
+                    }
+                  );
+                  if (initialRender) {
+                    renderToContext(mapCtx, 0, 1, 1, 0);
                   }
-                );
-              }
-            });
-          };
-          initAudio(
-            this.playerElements,
-            audioFloatData,
-            audioState
-          );
-          this.removePlaybackFrequencyBandPass();
-          if (audioState.playing || audioState.audioProgressZeroOne !== 0) {
-            this.pause();
-          }
-          // Initial render
+                  if (!this.sharedState.interacting || initialRender) {
+                    // Render the fine detail of the zoom level and then fill it in when available.
+                    renderRange(startZeroOne, endZeroOne, canvas.width, force).then(
+                      (rangeCropInfo) => {
+                        if (rangeCropInfo && rangeCropInfo.cropAmountTop) {
+                          cropAmountTop = rangeCropInfo.cropAmountTop;
+                          this.actualSampleRate = rangeCropInfo.actualSampleRate;
+                        }
+                        if (initialRender) {
+                          renderToContext(mapCtx, 0, 1, 1, 0).then(() => {
+                            if (
+                              this.loadingSpinner &&
+                              this.loadingSpinner.parentElement
+                            ) {
+                              this.loadingSpinner.parentElement.removeChild(
+                                this.loadingSpinner
+                              );
+                              this.playerElements.playButton.removeAttribute(
+                                "disabled"
+                              );
+                              this.shadowRoot.dispatchEvent(
+                                new CustomEvent("audio-loaded", {
+                                  composed: true,
+                                  bubbles: false,
+                                  cancelable: false,
+                                  detail: {
+                                    sampleRate: this.actualSampleRate,
+                                    duration: audioState.audioDuration,
+                                  },
+                                })
+                              );
+                              this.endLoad();
+                            }
+                          });
+                        }
+                        renderToContext(
+                          ctx,
+                          timelineState.left,
+                          timelineState.right,
+                          top,
+                          bottom
+                        ).then((s) => {
+                          if (
+                            initialRender &&
+                            startTimeOffset !== 0 &&
+                            endTimeOffset !== 1
+                          ) {
+                            // NOTE: If we're doing an initial render at a zoomed in portion, we need to make sure we create
+                            //  the full range image first.
+                            setInitialZoom(
+                              startTimeOffset,
+                              endTimeOffset,
+                              1,
+                              0,
+                              initialRender,
+                              true
+                            );
+                          }
 
-          this.render({ detail: { initialRender: true, force: true } });
-          // TODO: Animate to region of interest could be replaced by reactive setting of :start :end props?
-          this.resizeInited = true;
+                          if (!!s) {
+                            this.shadowRoot.dispatchEvent(
+                              new CustomEvent("render", {
+                                bubbles: false,
+                                composed: true,
+                                cancelable: false,
+                                detail: {
+                                  range: {
+                                    begin: startZeroOne,
+                                    end: endZeroOne,
+                                    min: bottom,
+                                    max: top,
+                                  },
+                                  context: userOverlayCtx,
+                                },
+                              })
+                            );
+                          }
+                        });
+                      }
+                    );
+                  }
+                });
+              };
+              initAudio(
+                this.playerElements,
+                audioFloatData,
+                audioState
+              );
+              this.removePlaybackFrequencyBandPass();
+              if (audioState.playing || audioState.audioProgressZeroOne !== 0) {
+                this.pause();
+              }
+              // Initial render
+              this.render({detail: {initialRender: true, force: true}});
+              // TODO: Animate to region of interest could be replaced by reactive setting of :start :end props?
+              this.resizeInited = true;
+            }
+          }
         } catch (e) {
+          // Failed to load audio, should show an error
           console.warn("aborted?", e);
         }
       }
@@ -998,10 +1051,24 @@ export default class Spectastiq extends HTMLElement {
     this.timelineElements.container.classList.remove("loading");
   }
 
+  showErrorMessage(error) {
+    if (
+      this.loadingSpinner &&
+      this.loadingSpinner.parentElement
+    ) {
+      this.loadingSpinner.parentElement.removeChild(
+        this.loadingSpinner
+      );
+    }
+    this.timelineElements.container.classList.add("error");
+    this.timelineElements.container.querySelector(".error-message").innerHTML = `Error: ${error}`;
+    this.endLoad();
+  }
+
   init() {
     // TODO: Maybe pass in min/max frequency bounds, so that the view is restricted to AOI?
     // TODO: Get height dynamically from attributes, and respond to changes in height.
-
+    const lazyLoad = this.hasAttribute("lazy");
     const totalHeight = this.height || 360;
     this.timelineHeight = Math.min(60, Math.max(44, totalHeight - 200));
     this.spectrogramHeight = totalHeight - this.timelineHeight;
@@ -1010,10 +1077,6 @@ export default class Spectastiq extends HTMLElement {
     const root = this.shadowRoot;
     if (!this.inited) {
       root.appendChild(template.content.cloneNode(true));
-    }
-    if (src && !this.inited) {
-    } else {
-      // TODO: No audio src, show ability to load from disk?
     }
 
     const container = root.getElementById("container");
@@ -1029,6 +1092,25 @@ export default class Spectastiq extends HTMLElement {
     const userOverlayCanvas = root.getElementById("user-overlay-canvas");
     const playheadCanvas = root.getElementById("playhead-canvas");
     const timelineUICanvas = root.getElementById("timeline-ui-canvas");
+
+    if (!(src && !this.inited)) {
+      container.classList.add("no-src");
+      // NOTE: No audio src, show ability to load from disk.
+      const selectUserFileBtn = root.querySelector(".select-user-file-btn");
+      const fileInput = root.querySelector(".select-user-file-input");
+      selectUserFileBtn.addEventListener("click", () => {
+        fileInput.click();
+      });
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files.length !== 0) {
+          root.getElementById("container").classList.remove("no-src");
+          const file = e.target.files[0];
+          this.localSrc = e.target.files[0].name;
+          this.loadSrc(URL.createObjectURL(file));
+        }
+      });
+    }
+
     if (!this.loadingSpinner) {
       this.loadingSpinner = root.getElementById("loading-spinner");
       this.loadingSpinner.parentElement.removeChild(this.loadingSpinner);
@@ -1096,7 +1178,7 @@ export default class Spectastiq extends HTMLElement {
       controls.classList.remove("disabled");
       this.sharedState.interacting = false;
       this.render &&
-        this.render({ detail: { initialRender: false, force: true } });
+      this.render({detail: {initialRender: false, force: true}});
     });
 
     const clearOverlay = () => {
@@ -1199,13 +1281,14 @@ export default class Spectastiq extends HTMLElement {
       if (yRangeChanged) {
         this.drawFrequencyScale && clearOverlay();
         this.drawFrequencyScale &&
-          redrawFrequencyScaleOverlay(timelineState, this.actualSampleRate);
+        redrawFrequencyScaleOverlay(timelineState, this.actualSampleRate);
       }
     });
     this.shadowRoot.addEventListener("audio-loaded", (e) => {
+      container.classList.add("audio-loaded");
       this.drawFrequencyScale && clearOverlay();
       this.drawFrequencyScale &&
-        redrawFrequencyScaleOverlay(timelineState, e.detail.sampleRate);
+      redrawFrequencyScaleOverlay(timelineState, e.detail.sampleRate);
     });
     overlayCanvas.addEventListener("double-click", async (e) => {
       if (this.applicationHandlesDoubleClick) {
@@ -1446,7 +1529,7 @@ export default class Spectastiq extends HTMLElement {
         didChangeWidth =
           this.deferredWidth &&
           this.timelineElements.canvas.width ===
-            this.deferredWidth * devicePixelRatio &&
+          this.deferredWidth * devicePixelRatio &&
           this.deferredWidth !== initialWidth;
         this.deferredWidth = undefined;
         this.deferredHeight = undefined;
@@ -1461,7 +1544,7 @@ export default class Spectastiq extends HTMLElement {
           if (this.actualSampleRate) {
             this.drawFrequencyScale && clearOverlay();
             this.drawFrequencyScale &&
-              redrawFrequencyScaleOverlay(timelineState, this.actualSampleRate);
+            redrawFrequencyScaleOverlay(timelineState, this.actualSampleRate);
           }
           if (!audioState.playing) {
             audioState.progressSampleTime = performance.now();
@@ -1479,11 +1562,11 @@ export default class Spectastiq extends HTMLElement {
           if (didChangeWidth) {
             this.invalidateCanvasCaches && this.invalidateCanvasCaches();
             this.renderRange &&
-              this.renderRange(0, 1, canvas.width, true).then(() => {
-                this.render({ detail: { initialRender: true, force: true } });
-              });
+            this.renderRange(0, 1, canvas.width, true).then(() => {
+              this.render({detail: {initialRender: true, force: true}});
+            });
           } else {
-            this.render({ detail: { initialRender: true, force: true } });
+            this.render({detail: {initialRender: true, force: true}});
           }
           this.sharedState.interacting = false;
         }, 300);
@@ -1495,13 +1578,23 @@ export default class Spectastiq extends HTMLElement {
       this.resizeCanvases(entries[0].contentRect.width, false);
     });
     resizeObserver.observe(container);
-
-    // TODO: Only if we're in the visible viewport, otherwise defer this
-
-    // Initial attributeChangedCallback happens before connectedCallback, so need to load src after initial one-time setup.
-    if (src && src !== "null" && src !== "undefined") {
-      // NOTE: Vue initially passes `null` or `undefined` to src, which gets stringified.
-      this.loadSrc(src);
+    if (lazyLoad) {
+      const intersectionObserver = new IntersectionObserver((intersection) => {
+        if (intersection[0].isIntersecting && src && src !== "null" && src !== "undefined") {
+          this.loadSrc(src);
+          intersectionObserver.disconnect();
+        }
+      }, {
+        rootMargin: '50px',
+        threshold: 0.1
+      });
+      intersectionObserver.observe(container);
+    } else {
+      // Initial attributeChangedCallback happens before connectedCallback, so need to load src after initial one-time setup.
+      if (src && src !== "null" && src !== "undefined") {
+        // NOTE: Vue initially passes `null` or `undefined` to src, which gets stringified.
+        this.loadSrc(src);
+      }
     }
   }
 }

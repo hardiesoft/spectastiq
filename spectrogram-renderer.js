@@ -1,25 +1,21 @@
-import { init, mapRange } from "./webgl-drawimage.js";
+import {init, mapRange} from "./webgl-drawimage.js";
+
 const FFT_WIDTH = 2048;
 const HEIGHT = FFT_WIDTH / 2; // Height needs to be at half the FFT width.
 const numWorkers = (navigator.hardwareConcurrency || 2) - 1;
+
 async function initWorkers(state) {
   if (state.workers.length === 0) {
     const remoteScriptOrigin = cdnScriptOrigin();
-    let wasm;
-    if (remoteScriptOrigin) {
-      wasm = await (
-        await fetch(`${remoteScriptOrigin}/pkg/spectastiq_bg.wasm`)
-      ).arrayBuffer();
-    } else {
-      wasm = await (
-        await fetch(new URL("./pkg/spectastiq_bg.wasm", import.meta.url))
-      ).arrayBuffer();
-    }
-
+    const wasmUrl = remoteScriptOrigin ? `${remoteScriptOrigin}/pkg/spectastiq_bg.wasm` : new URL("./pkg/spectastiq_bg.wasm", import.meta.url);
+    const wasmLoader = fetch(wasmUrl);
     const initWorkers = [];
     for (let i = 0; i < numWorkers; i++) {
       const worker = new WorkerPromise(`fft-worker-${i}`, state);
       state.workers.push(worker);
+    }
+    const wasm = await (await wasmLoader).arrayBuffer();
+    for (const worker of state.workers) {
       initWorkers.push(worker.init(wasm));
     }
     await Promise.all(initWorkers);
@@ -111,9 +107,15 @@ export const initSpectrogram = async (fileBytes, previousState) => {
     numberOfChannels: 1,
     sampleRate: 48000,
   });
-  // TODO: Handle audio decode failure
   // TODO: Decode audio off main thread
-  const wavData = await audioContext.decodeAudioData(fileBytes);
+  const wavData = await audioContext.decodeAudioData(fileBytes).catch((e) => {
+    console.error(e);
+  });
+  if (!wavData) {
+    return {
+      error: 'Could not decode audio data',
+    };
+  }
   const floatData = wavData.getChannelData(0);
   // Sometimes we get malformed files that end in zeros – we want to truncate these.
   let actualEnd = floatData.length;
@@ -153,7 +155,7 @@ export const initSpectrogram = async (fileBytes, previousState) => {
     invalidateCanvasCaches,
     cyclePalette: () => cyclePalette(state),
     terminateWorkers: () => terminateWorkers(state),
-    persistentSpectrogramState: { workers: state.workers, offlineAudioContext: audioContext, ctxs: state.ctxs },
+    persistentSpectrogramState: {workers: state.workers, offlineAudioContext: audioContext, ctxs: state.ctxs},
     getGainForRegion: (startZeroOne, endZeroOne, minFreq, maxFreq) => getGainForRegion(state, startZeroOne, endZeroOne, minFreq, maxFreq),
   };
 };
@@ -183,8 +185,8 @@ const cyclePalette = (state) => {
 const renderRange =
   (state) => async (startZeroOne, endZeroOne, renderWidth, force) => {
 
-  // NOTE: Min width for renders, so that narrow viewports don't get overly blurry images when zoomed in.
-  renderWidth = Math.max(1920, renderWidth);
+    // NOTE: Min width for renders, so that narrow viewports don't get overly blurry images when zoomed in.
+    renderWidth = Math.max(1920, renderWidth);
     if (startZeroOne === 0 && endZeroOne === 1) {
       if (state.imageDatas.length) {
         // We've already rendered the fully zoomed out version, no need to re-render
@@ -232,112 +234,112 @@ const renderRange =
 
 const renderToContext =
   (state) =>
-  async (
-    ctx,
-    startZeroOne,
-    endZeroOne,
-    top,
-    bottom
-  ) => {
-    // Figure out the best intermediate render to stretch.
-    // Do we store the final coloured imagedata to stretch, or the FFT array data?
+    async (
+      ctx,
+      startZeroOne,
+      endZeroOne,
+      top,
+      bottom
+    ) => {
+      // Figure out the best intermediate render to stretch.
+      // Do we store the final coloured imagedata to stretch, or the FFT array data?
 
-    // Set best match to the full zoomed out range, then look for a better match
-    let bestMatch = state.imageDatas[0];
-    let exactMatch = false;
-    let cropLeft = startZeroOne;
-    let cropRight = endZeroOne;
+      // Set best match to the full zoomed out range, then look for a better match
+      let bestMatch = state.imageDatas[0];
+      let exactMatch = false;
+      let cropLeft = startZeroOne;
+      let cropRight = endZeroOne;
 
-    // Look first for an exact match.
-    for (let i = 1; i < state.imageDatas.length; i++) {
-      const data = state.imageDatas[i];
-      if (
-        data.startZeroOne === startZeroOne &&
-        data.endZeroOne === endZeroOne
-      ) {
-        cropLeft = 0;
-        cropRight = 1;
-        // An exact match
-        exactMatch = true;
-        bestMatch = data;
-        break;
-      }
-    }
-    if (!exactMatch) {
-      // Work out whether we're zooming out or in relative to the prev frame, or panning.
-      if (state.imageDatas.length === 2) {
-        let zoomingIn = false;
-        // Look for a more zoomed out match
-        for (let i = 1; i < state.imageDatas.length; i++) {
-          const data = state.imageDatas[i];
-          if (data.startZeroOne <= startZeroOne && data.endZeroOne >= endZeroOne) {
-            zoomingIn = true;
-            // Work out what proportion of the more zoomed out image we want.
-            cropLeft = mapRange(
-              startZeroOne,
-              data.startZeroOne,
-              data.endZeroOne,
-              0,
-              1
-            );
-            cropRight = mapRange(
-              endZeroOne,
-              data.startZeroOne,
-              data.endZeroOne,
-              0,
-              1
-            );
-            bestMatch = data;
-            break;
-          }
-        }
-
-        if (!zoomingIn) {
-          // If zooming out, or panning, synthesise a new image
-          const prevImage = state.imageDatas[1];
-          const range = endZeroOne - startZeroOne;
-          const imageRange = prevImage.endZeroOne - prevImage.startZeroOne;
-          const diff = Math.abs(range - imageRange);
-          if (diff > 0.000000000001) {
-            // "Zooming out"
-            // TODO: Better image synthesis of fully zoomed out image, plus existing image that's at a slightly greater
-            //  zoom level.
-          } else {
-            // "Panning"
-            // TODO: Better image synthesis of fully zoomed out image + existing portion of image at the zoom level
-            //  we're already at.
-            // Paste together the relevant bits of each image.  Best to do this in the shader, so we'd pass two
-            // textures, and the various offsets of each, maybe with a feather at the edges
-          }
+      // Look first for an exact match.
+      for (let i = 1; i < state.imageDatas.length; i++) {
+        const data = state.imageDatas[i];
+        if (
+          data.startZeroOne === startZeroOne &&
+          data.endZeroOne === endZeroOne
+        ) {
+          cropLeft = 0;
+          cropRight = 1;
+          // An exact match
+          exactMatch = true;
+          bestMatch = data;
+          break;
         }
       }
-    }
-    const bitmap = bestMatch;
-    if (bitmap) {
-      const end = cropLeft + (cropRight - cropLeft);
+      if (!exactMatch) {
+        // Work out whether we're zooming out or in relative to the prev frame, or panning.
+        if (state.imageDatas.length === 2) {
+          let zoomingIn = false;
+          // Look for a more zoomed out match
+          for (let i = 1; i < state.imageDatas.length; i++) {
+            const data = state.imageDatas[i];
+            if (data.startZeroOne <= startZeroOne && data.endZeroOne >= endZeroOne) {
+              zoomingIn = true;
+              // Work out what proportion of the more zoomed out image we want.
+              cropLeft = mapRange(
+                startZeroOne,
+                data.startZeroOne,
+                data.endZeroOne,
+                0,
+                1
+              );
+              cropRight = mapRange(
+                endZeroOne,
+                data.startZeroOne,
+                data.endZeroOne,
+                0,
+                1
+              );
+              bestMatch = data;
+              break;
+            }
+          }
 
-      const bitmapIndex = bitmap.startZeroOne === 0 && bitmap.endZeroOne === 1 ? 0 : 1;
-
-      // If range is 0..1
-      bitmap.submitted = bitmap.submitted || new Map();
-      if (!bitmap.submitted.has(ctx)) {
-        submitTexture(state, ctx)(bitmapIndex, bitmap.imageData, bitmap.width, bitmap.height);
-        bitmap.submitted.set(ctx, true);
+          if (!zoomingIn) {
+            // If zooming out, or panning, synthesise a new image
+            const prevImage = state.imageDatas[1];
+            const range = endZeroOne - startZeroOne;
+            const imageRange = prevImage.endZeroOne - prevImage.startZeroOne;
+            const diff = Math.abs(range - imageRange);
+            if (diff > 0.000000000001) {
+              // "Zooming out"
+              // TODO: Better image synthesis of fully zoomed out image, plus existing image that's at a slightly greater
+              //  zoom level.
+            } else {
+              // "Panning"
+              // TODO: Better image synthesis of fully zoomed out image + existing portion of image at the zoom level
+              //  we're already at.
+              // Paste together the relevant bits of each image.  Best to do this in the shader, so we'd pass two
+              // textures, and the various offsets of each, maybe with a feather at the edges
+            }
+          }
+        }
       }
-      drawImage(state, ctx)(
-        bitmapIndex,
-        bitmap.normalizationScale,
-        cropLeft,
-        end,
-        top,
-        bottom,
-        state.cropAmountTop,
-        state.cropAmountBottom,
-        state.colorMap
-      );
-      return state;
-    }
-  };
+      const bitmap = bestMatch;
+      if (bitmap) {
+        const end = cropLeft + (cropRight - cropLeft);
+
+        const bitmapIndex = bitmap.startZeroOne === 0 && bitmap.endZeroOne === 1 ? 0 : 1;
+
+        // If range is 0..1
+        bitmap.submitted = bitmap.submitted || new Map();
+        if (!bitmap.submitted.has(ctx)) {
+          submitTexture(state, ctx)(bitmapIndex, bitmap.imageData, bitmap.width, bitmap.height);
+          bitmap.submitted.set(ctx, true);
+        }
+        drawImage(state, ctx)(
+          bitmapIndex,
+          bitmap.normalizationScale,
+          cropLeft,
+          end,
+          top,
+          bottom,
+          state.cropAmountTop,
+          state.cropAmountBottom,
+          state.colorMap
+        );
+        return state;
+      }
+    };
 
 const cdnScriptOrigin = () => {
   const spectastiqIsLoadedFromCdn = Array.from(document.getElementsByTagName('script'))
@@ -362,7 +364,7 @@ class WorkerPromise {
             [
               `importScripts("${remoteScriptOrigin}/worker-bundle.min.js")`,
             ],
-            { type: "text/javascript" }
+            {type: "text/javascript"}
           )),
         {type: "classic"}
       );
@@ -372,7 +374,7 @@ class WorkerPromise {
         {type: "module", credentials: "same-origin"}
       );
     }
-    this.worker.onmessage = ({ data }) => {
+    this.worker.onmessage = ({data}) => {
       if ((!window.SharedArrayBuffer) && data.output) {
         // Copy outputs back to state.sharedOutputData in the correct offsets
         this.output.subarray(data.offsets.outStart, data.offsets.outEnd).set(data.output, 0);
@@ -409,6 +411,7 @@ class WorkerPromise {
       wasm,
     });
   }
+
   terminate() {
     this.worker.terminate();
   }
