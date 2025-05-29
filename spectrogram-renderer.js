@@ -173,7 +173,7 @@ const submitTexture = (state, ctx) => {
   return state.ctxs.get(ctx).submitTexture;
 };
 
-export const colorMaps = ["Viridis", "Plasma", "Inferno", "Grayscale"];
+export const colorMaps = ["Viridis", "Plasma", "Inferno", "Grey"];
 const cyclePalette = (state) => {
   state.colorMap++;
   if (state.colorMap >= colorMaps.length) {

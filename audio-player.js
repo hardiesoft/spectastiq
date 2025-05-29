@@ -6,7 +6,7 @@ export const initAudioPlayer = (
   timelineState,
   playerElements,
 ) => {
-  const audioContext = new AudioContext({ sampleRate: 48000 });
+  const audioContext = new AudioContext({sampleRate: 48000});
   const gainNode = audioContext.createGain();
   const filterNode = audioContext.createBiquadFilter();
   filterNode.type = "allpass";
@@ -36,13 +36,14 @@ export const initAudioPlayer = (
     root,
   };
 
+  // FIXME Maybe this should be in setup default controls
   playerElements.playButton.addEventListener("click", async () => {
     await togglePlayback(state, timelineState, sharedState, playerElements);
   });
 
   return {
     audioState: state,
-    updatePlayhead: (beganPlaying = false, rangeChange = false, ) =>
+    updatePlayhead: (beganPlaying = false, rangeChange = false,) =>
       updatePlayhead(
         state,
         timelineState,
@@ -89,10 +90,10 @@ const setGain = (gainNode, volume) => {
 };
 
 const startPlayheadDrag = (state, timelineState, sharedState, playerElements) => {
-    state.wasPlaying = state.playing;
-    if (state.playing) {
-      pauseAudio(state, timelineState, sharedState, playerElements, state.audioProgressZeroOne);
-    }
+  state.wasPlaying = state.playing;
+  if (state.playing) {
+    pauseAudio(state, timelineState, sharedState, playerElements, state.audioProgressZeroOne);
+  }
 };
 
 const endPlayheadDrag = (
@@ -110,22 +111,22 @@ const endPlayheadDrag = (
 
 
 const dragGlobalPlayhead = (xZeroOne, state, timelineState, sharedState, playerElements) => {
-    const thisOffsetXZeroOne = Math.max(
-      0,
-      Math.min(xZeroOne, 1)
-    );
-    cancelAnimationFrame(state.dragPlayheadRaf);
-    if (state.audioContext.state !== "running") {
-      // Update the playhead anyway.
-      state.audioProgressZeroOne = thisOffsetXZeroOne;
+  const thisOffsetXZeroOne = Math.max(
+    0,
+    Math.min(xZeroOne, 1)
+  );
+  cancelAnimationFrame(state.dragPlayheadRaf);
+  if (state.audioContext.state !== "running") {
+    // Update the playhead anyway.
+    state.audioProgressZeroOne = thisOffsetXZeroOne;
+    updatePlayhead(state, timelineState, sharedState, playerElements);
+  }
+  state.dragPlayheadRaf = requestAnimationFrame(async () => {
+    state.audioProgressZeroOne = thisOffsetXZeroOne;
+    setPlaybackTime(thisOffsetXZeroOne, state, playerElements).then(() => {
       updatePlayhead(state, timelineState, sharedState, playerElements);
-    }
-    state.dragPlayheadRaf = requestAnimationFrame(async () => {
-      state.audioProgressZeroOne = thisOffsetXZeroOne;
-      setPlaybackTime(thisOffsetXZeroOne, state, playerElements).then(() => {
-        updatePlayhead(state, timelineState, sharedState, playerElements);
-      });
     });
+  });
 };
 
 const dragLocalPlayhead = (
@@ -135,28 +136,28 @@ const dragLocalPlayhead = (
   sharedState,
   playerElements
 ) => {
-    const range = timelineState.right - timelineState.left;
-    const thisOffsetXZeroOne = Math.min(
-      timelineState.right,
-      timelineState.left +
-        Math.max(
-          0,
-          Math.min(range * xZeroOne, 1)
-        )
-    );
-    cancelAnimationFrame(state.dragPlayheadRaf);
-    if (state.audioContext.state !== "running") {
-      // Update the playhead anyway.
-      state.audioProgressZeroOne = thisOffsetXZeroOne;
+  const range = timelineState.right - timelineState.left;
+  const thisOffsetXZeroOne = Math.min(
+    timelineState.right,
+    timelineState.left +
+    Math.max(
+      0,
+      Math.min(range * xZeroOne, 1)
+    )
+  );
+  cancelAnimationFrame(state.dragPlayheadRaf);
+  if (state.audioContext.state !== "running") {
+    // Update the playhead anyway.
+    state.audioProgressZeroOne = thisOffsetXZeroOne;
+    updatePlayhead(state, timelineState, sharedState, playerElements);
+  }
+  state.dragPlayheadRaf = requestAnimationFrame(async () => {
+    state.audioProgressZeroOne = thisOffsetXZeroOne;
+    //state.progressSampleTime = performance.now();
+    setPlaybackTime(thisOffsetXZeroOne, state, playerElements).then(() => {
       updatePlayhead(state, timelineState, sharedState, playerElements);
-    }
-    state.dragPlayheadRaf = requestAnimationFrame(async () => {
-      state.audioProgressZeroOne = thisOffsetXZeroOne;
-      //state.progressSampleTime = performance.now();
-      setPlaybackTime(thisOffsetXZeroOne, state, playerElements).then(() => {
-        updatePlayhead(state, timelineState, sharedState, playerElements);
-      });
     });
+  });
 };
 
 const setPlaybackTime = async (offsetZeroOne, state) => {
@@ -178,6 +179,10 @@ export const initAudio = (playerElements, audioFloatData, state) => {
 };
 
 const playAudio = async (state, timelineState, sharedState, playerElements, startAtOffsetZeroOne, stopAtOffsetZeroOne) => {
+  if (state.audioDuration - (state.audioProgressZeroOne * state.audioDuration) < 0.05) {
+    // We're right at the end of the clip, so restart playback at the beginning
+    state.audioProgressZeroOne = 0;
+  }
   if (state.playing) {
     pauseAudio(state, timelineState, sharedState, playerElements);
   }
@@ -270,7 +275,7 @@ const updatePlayhead = (
       state.audioProgressZeroOne = lastProgress;
     }
   }
-  const playheadWidth = Math.min(2, 1.5);
+  const playheadWidth = 1.5 * Math.min(1, devicePixelRatio / 2);
   const progress = state.audioProgressZeroOne;
   playheadCanvasCtx.clearRect(0, 0, playheadCanvasCtx.canvas.width, playheadCanvasCtx.canvas.height);
   mainPlayheadCanvasCtx.clearRect(0, 0, mainPlayheadCanvasCtx.canvas.width, mainPlayheadCanvasCtx.canvas.height);
@@ -282,7 +287,7 @@ const updatePlayhead = (
       playheadCanvasCtx.fillStyle = timelineState.isDarkTheme ? `rgba(204, 204, 204, 0.8)` : `rgba(0, 0, 0, 0.8)`;
 
       // Draw the global playhead position
-      const left = Math.min(width - playheadWidth - 1, Math.max(-playheadWidth / 2, progress * width - playheadWidth/2));
+      const left = Math.min(width - playheadWidth - 1, Math.max(-playheadWidth / 2, progress * width - playheadWidth / 2));
       playheadCanvasCtx.fillRect(left, 0, playheadWidth, height);
     }
     {

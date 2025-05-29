@@ -14,7 +14,12 @@ const getMaxYZoom = (canvasHeight) => {
   const FFT_WINDOW_SIZE = 2048;
   const frequencyResolution = FFT_WINDOW_SIZE / 2;
   // About 180 samples per pixel looks about max res at FFT size of 2048
-  return frequencyResolution / canvasHeight; // * window.devicePixelRatio;
+  //return frequencyResolution / canvasHeight; // * window.devicePixelRatio;
+
+
+  // FIXME: Should this be * 0.8?  Maybe it's being clamped elsewhere?
+  return (frequencyResolution / (canvasHeight / window.devicePixelRatio));
+
 };
 
 const setInitialZoom = (

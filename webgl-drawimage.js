@@ -1,9 +1,4 @@
-import {
-  VIRIDIS,
-  PLASMA,
-  INFERNO,
-  GRAYSCALE_INVERTED
-} from "./colormaps.js";
+import {GRAYSCALE_INVERTED, INFERNO, PLASMA, VIRIDIS} from "./colormaps.js";
 
 // language=GLSL
 const vertexShaderSource = `#version 300 es
@@ -12,16 +7,16 @@ in vec2 a_uv;
 uniform highp vec4 u_uv;
 
 mat4 matrix = mat4(
-    2.0,  0.0,  0.0,  0.0,
-    0.0, -2.0,  0.0,  0.0,
-    0.0,  0.0, -1.0,  0.0,
-   -1.0,  1.0,  0.0,  1.0
+2.0, 0.0, 0.0, 0.0,
+0.0, -2.0, 0.0, 0.0,
+0.0, 0.0, -1.0, 0.0,
+-1.0, 1.0, 0.0, 1.0
 );
 out vec2 v_texcoord;
 
 void main() {
-  gl_Position = matrix * a_position;
-  v_texcoord = a_uv * vec2(1.0, (u_uv.y - u_uv.x)) + vec2(0.0, u_uv.x);
+    gl_Position = matrix * a_position;
+    v_texcoord = a_uv * vec2(1.0, (u_uv.y - u_uv.x)) + vec2(0.0, u_uv.x);
 }
 `;
 
@@ -79,28 +74,28 @@ void main() {
 
     if (in_range) {
         y = map(y, selected_bottom, selected_top, bottom, top);
-        
+
         // BLUE
         //overlay_debug_color = vec4(0.0, 0.0, 1.0, 0.2);
     } else if (below_range) {
         y = map(y, 0.0, selected_bottom, 0.0, bottom);
-        
+
         // GREEN
         //overlay_debug_color = vec4(0.0, 1.0, 0.0, .2);
     } else if (above_range) {
         y = map(y, selected_top, 1.0, top, 1.0);
-        
+
         // RED
         //overlay_debug_color = vec4(1.0, 0.0, 0.0, 0.2);
     }
-    
+
     y = map(y, 0.0, 1.0, crop_top, crop_bottom);
     vec2 texcoord = vec2(y, x);
     vec4 c = texture(u_texture, vec3(texcoord.x, texcoord.y, u_spectrogram_index));
     float e = INV_LOG_10 * log(c.r);
     float energyNormalised = e * u_scale;
     float norm = energyNormalised * energyNormalised * energyNormalised * energyNormalised * energyNormalised * energyNormalised;
-    
+
     // TODO: Mel scale?
     vec3 colorMapVal = texture(u_colormap, vec3(norm, 0.5, u_colormap_index)).rgb;
     //outColor = vec4(mix(colorMapVal, overlay_debug_color.rgb, overlay_debug_color.a), 1.0);
@@ -125,7 +120,7 @@ const drawImage = (
   paletteTextureIndex = 0
 ) => {
   const texture = texturesForContexts.get(gl);
-    // Tell WebGL how to convert from clip space to pixels
+  // Tell WebGL how to convert from clip space to pixels
   gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
   // Clear the canvas
   gl.clearColor(0, 0, 0, 0);
@@ -149,7 +144,7 @@ const drawImage = (
   gl.uniform1i(colormapLocation, 0);
   gl.uniform1i(textureLocation, 1);
   cropBottom = 1.0 - cropBottom;
-  const maxYZoom = texture.texWidth / (gl.canvas.height / window.devicePixelRatio);
+  const maxYZoom = Math.max(gl.canvas.height, texture.texWidth) / (gl.canvas.height / window.devicePixelRatio);
   gl.uniform4fv(uvCoords, new Float32Array([left, right, top, bottom]));
   gl.uniform3fv(cropY, new Float32Array([cropTop, cropBottom, maxYZoom]));
   // draw the quad (2 triangles, 6 vertices)
@@ -166,7 +161,7 @@ export const initMainTexture = (gl, texWidth, texHeight) => {
   // Texture array for raw spectrogram textures:
   const hasFloatLinear = !!gl.getExtension("OES_texture_float_linear");
   const texture = gl.createTexture();
-  texturesForContexts.set(gl, { texture, texWidth, texHeight });
+  texturesForContexts.set(gl, {texture, texWidth, texHeight});
   gl.activeTexture(gl.TEXTURE1);
   gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
   gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -178,7 +173,7 @@ export const initMainTexture = (gl, texWidth, texHeight) => {
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   }
-  const empty =  new Float32Array(new ArrayBuffer(texWidth * 3 * texHeight * 4))// Dummy data;
+  const empty = new Float32Array(new ArrayBuffer(texWidth * 3 * texHeight * 4))// Dummy data;
   gl.texImage3D(
     gl.TEXTURE_2D_ARRAY,
     0, // mip level
@@ -189,7 +184,7 @@ export const initMainTexture = (gl, texWidth, texHeight) => {
     0,
     gl.RED,
     gl.FLOAT,
-   empty
+    empty
   );
   return {texture};
 }
@@ -236,10 +231,10 @@ export const init = (gl) => {
   gl.attachShader(program, fragmentShader);
   gl.linkProgram(program);
   const maps = [
-    VIRIDIS,
-    PLASMA,
-    INFERNO,
-    GRAYSCALE_INVERTED,
+    VIRIDIS.flat(),
+    PLASMA.flat(),
+    INFERNO.flat(),
+    GRAYSCALE_INVERTED.flat(),
   ];
   const colorMaps = new Float32Array(maps.flat());
   {

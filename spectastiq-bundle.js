@@ -259,7 +259,7 @@
     [0.974417, 0.903590, 0.130215],
     [0.983868, 0.904867, 0.136897],
     [0.993248, 0.906157, 0.143936],
-  ].flat();
+  ];
 
   const PLASMA = [
     [0.050383, 0.029803, 0.527975],
@@ -518,7 +518,7 @@
     [0.944152, 0.961916, 0.146861],
     [0.941896, 0.968590, 0.140956],
     [0.940015, 0.975158, 0.131326]
-  ].flat();
+  ];
   const INFERNO = [
     [0.001462, 0.000466, 0.013866],
     [0.002267, 0.001270, 0.018570],
@@ -776,7 +776,7 @@
     [0.976511, 0.989753, 0.616760],
     [0.982257, 0.994109, 0.631017],
     [0.988362, 0.998364, 0.644924]
-  ].flat();
+  ];
 
   const grayscaleInverted = () => {
     const scale = [];
@@ -787,8 +787,14 @@
     }
     return scale;
   };
-  const GRAYSCALE_INVERTED = grayscaleInverted().flat();
+  const GRAYSCALE_INVERTED = grayscaleInverted();
   // More maps: https://github.com/bpostlethwaite/colormap/tree/master/res/res
+  const COLOR_MAPS = {
+    plasma: PLASMA,
+    viridis: VIRIDIS,
+    grey: GRAYSCALE_INVERTED,
+    inferno: INFERNO,
+  };
 
   // language=GLSL
   const vertexShaderSource = `#version 300 es
@@ -797,16 +803,16 @@ in vec2 a_uv;
 uniform highp vec4 u_uv;
 
 mat4 matrix = mat4(
-    2.0,  0.0,  0.0,  0.0,
-    0.0, -2.0,  0.0,  0.0,
-    0.0,  0.0, -1.0,  0.0,
-   -1.0,  1.0,  0.0,  1.0
+2.0, 0.0, 0.0, 0.0,
+0.0, -2.0, 0.0, 0.0,
+0.0, 0.0, -1.0, 0.0,
+-1.0, 1.0, 0.0, 1.0
 );
 out vec2 v_texcoord;
 
 void main() {
-  gl_Position = matrix * a_position;
-  v_texcoord = a_uv * vec2(1.0, (u_uv.y - u_uv.x)) + vec2(0.0, u_uv.x);
+    gl_Position = matrix * a_position;
+    v_texcoord = a_uv * vec2(1.0, (u_uv.y - u_uv.x)) + vec2(0.0, u_uv.x);
 }
 `;
 
@@ -864,28 +870,28 @@ void main() {
 
     if (in_range) {
         y = map(y, selected_bottom, selected_top, bottom, top);
-        
+
         // BLUE
         //overlay_debug_color = vec4(0.0, 0.0, 1.0, 0.2);
     } else if (below_range) {
         y = map(y, 0.0, selected_bottom, 0.0, bottom);
-        
+
         // GREEN
         //overlay_debug_color = vec4(0.0, 1.0, 0.0, .2);
     } else if (above_range) {
         y = map(y, selected_top, 1.0, top, 1.0);
-        
+
         // RED
         //overlay_debug_color = vec4(1.0, 0.0, 0.0, 0.2);
     }
-    
+
     y = map(y, 0.0, 1.0, crop_top, crop_bottom);
     vec2 texcoord = vec2(y, x);
     vec4 c = texture(u_texture, vec3(texcoord.x, texcoord.y, u_spectrogram_index));
     float e = INV_LOG_10 * log(c.r);
     float energyNormalised = e * u_scale;
     float norm = energyNormalised * energyNormalised * energyNormalised * energyNormalised * energyNormalised * energyNormalised;
-    
+
     // TODO: Mel scale?
     vec3 colorMapVal = texture(u_colormap, vec3(norm, 0.5, u_colormap_index)).rgb;
     //outColor = vec4(mix(colorMapVal, overlay_debug_color.rgb, overlay_debug_color.a), 1.0);
@@ -910,7 +916,7 @@ void main() {
     paletteTextureIndex = 0
   ) => {
     const texture = texturesForContexts.get(gl);
-      // Tell WebGL how to convert from clip space to pixels
+    // Tell WebGL how to convert from clip space to pixels
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
     // Clear the canvas
     gl.clearColor(0, 0, 0, 0);
@@ -934,7 +940,7 @@ void main() {
     gl.uniform1i(colormapLocation, 0);
     gl.uniform1i(textureLocation, 1);
     cropBottom = 1.0 - cropBottom;
-    const maxYZoom = texture.texWidth / (gl.canvas.height / window.devicePixelRatio);
+    const maxYZoom = Math.max(gl.canvas.height, texture.texWidth) / (gl.canvas.height / window.devicePixelRatio);
     gl.uniform4fv(uvCoords, new Float32Array([left, right, top, bottom]));
     gl.uniform3fv(cropY, new Float32Array([cropTop, cropBottom, maxYZoom]));
     // draw the quad (2 triangles, 6 vertices)
@@ -951,7 +957,7 @@ void main() {
     // Texture array for raw spectrogram textures:
     const hasFloatLinear = !!gl.getExtension("OES_texture_float_linear");
     const texture = gl.createTexture();
-    texturesForContexts.set(gl, { texture, texWidth, texHeight });
+    texturesForContexts.set(gl, {texture, texWidth, texHeight});
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -963,7 +969,7 @@ void main() {
       gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     }
-    const empty =  new Float32Array(new ArrayBuffer(texWidth * 3 * texHeight * 4));// Dummy data;
+    const empty = new Float32Array(new ArrayBuffer(texWidth * 3 * texHeight * 4));// Dummy data;
     gl.texImage3D(
       gl.TEXTURE_2D_ARRAY,
       0, // mip level
@@ -974,7 +980,7 @@ void main() {
       0,
       gl.RED,
       gl.FLOAT,
-     empty
+      empty
     );
     return {texture};
   };
@@ -1021,10 +1027,10 @@ void main() {
     gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);
     const maps = [
-      VIRIDIS,
-      PLASMA,
-      INFERNO,
-      GRAYSCALE_INVERTED,
+      VIRIDIS.flat(),
+      PLASMA.flat(),
+      INFERNO.flat(),
+      GRAYSCALE_INVERTED.flat(),
     ];
     const colorMaps = new Float32Array(maps.flat());
     {
@@ -1192,7 +1198,12 @@ void main() {
     const FFT_WINDOW_SIZE = 2048;
     const frequencyResolution = FFT_WINDOW_SIZE / 2;
     // About 180 samples per pixel looks about max res at FFT size of 2048
-    return frequencyResolution / canvasHeight; // * window.devicePixelRatio;
+    //return frequencyResolution / canvasHeight; // * window.devicePixelRatio;
+
+
+    // FIXME: Should this be * 0.8?  Maybe it's being clamped elsewhere?
+    return (frequencyResolution / (canvasHeight / window.devicePixelRatio));
+
   };
 
   const setInitialZoom = (
@@ -2772,7 +2783,7 @@ void main() {
     return state.ctxs.get(ctx).submitTexture;
   };
 
-  const colorMaps = ["Viridis", "Plasma", "Inferno", "Grayscale"];
+  const colorMaps = ["Viridis", "Plasma", "Inferno", "Grey"];
   const cyclePalette = (state) => {
     state.colorMap++;
     if (state.colorMap >= colorMaps.length) {
@@ -3159,7 +3170,7 @@ void main() {
     timelineState,
     playerElements,
   ) => {
-    const audioContext = new AudioContext({ sampleRate: 48000 });
+    const audioContext = new AudioContext({sampleRate: 48000});
     const gainNode = audioContext.createGain();
     const filterNode = audioContext.createBiquadFilter();
     filterNode.type = "allpass";
@@ -3189,13 +3200,14 @@ void main() {
       root,
     };
 
+    // FIXME Maybe this should be in setup default controls
     playerElements.playButton.addEventListener("click", async () => {
       await togglePlayback(state, timelineState, sharedState, playerElements);
     });
 
     return {
       audioState: state,
-      updatePlayhead: (beganPlaying = false, rangeChange = false, ) =>
+      updatePlayhead: (beganPlaying = false, rangeChange = false,) =>
         updatePlayhead(
           state,
           timelineState,
@@ -3242,10 +3254,10 @@ void main() {
   };
 
   const startPlayheadDrag = (state, timelineState, sharedState, playerElements) => {
-      state.wasPlaying = state.playing;
-      if (state.playing) {
-        pauseAudio(state, timelineState, sharedState, playerElements, state.audioProgressZeroOne);
-      }
+    state.wasPlaying = state.playing;
+    if (state.playing) {
+      pauseAudio(state, timelineState, sharedState, playerElements, state.audioProgressZeroOne);
+    }
   };
 
   const endPlayheadDrag = (
@@ -3263,22 +3275,22 @@ void main() {
 
 
   const dragGlobalPlayhead = (xZeroOne, state, timelineState, sharedState, playerElements) => {
-      const thisOffsetXZeroOne = Math.max(
-        0,
-        Math.min(xZeroOne, 1)
-      );
-      cancelAnimationFrame(state.dragPlayheadRaf);
-      if (state.audioContext.state !== "running") {
-        // Update the playhead anyway.
-        state.audioProgressZeroOne = thisOffsetXZeroOne;
+    const thisOffsetXZeroOne = Math.max(
+      0,
+      Math.min(xZeroOne, 1)
+    );
+    cancelAnimationFrame(state.dragPlayheadRaf);
+    if (state.audioContext.state !== "running") {
+      // Update the playhead anyway.
+      state.audioProgressZeroOne = thisOffsetXZeroOne;
+      updatePlayhead(state, timelineState, sharedState, playerElements);
+    }
+    state.dragPlayheadRaf = requestAnimationFrame(async () => {
+      state.audioProgressZeroOne = thisOffsetXZeroOne;
+      setPlaybackTime(thisOffsetXZeroOne, state).then(() => {
         updatePlayhead(state, timelineState, sharedState, playerElements);
-      }
-      state.dragPlayheadRaf = requestAnimationFrame(async () => {
-        state.audioProgressZeroOne = thisOffsetXZeroOne;
-        setPlaybackTime(thisOffsetXZeroOne, state).then(() => {
-          updatePlayhead(state, timelineState, sharedState, playerElements);
-        });
       });
+    });
   };
 
   const dragLocalPlayhead = (
@@ -3288,28 +3300,28 @@ void main() {
     sharedState,
     playerElements
   ) => {
-      const range = timelineState.right - timelineState.left;
-      const thisOffsetXZeroOne = Math.min(
-        timelineState.right,
-        timelineState.left +
-          Math.max(
-            0,
-            Math.min(range * xZeroOne, 1)
-          )
-      );
-      cancelAnimationFrame(state.dragPlayheadRaf);
-      if (state.audioContext.state !== "running") {
-        // Update the playhead anyway.
-        state.audioProgressZeroOne = thisOffsetXZeroOne;
+    const range = timelineState.right - timelineState.left;
+    const thisOffsetXZeroOne = Math.min(
+      timelineState.right,
+      timelineState.left +
+      Math.max(
+        0,
+        Math.min(range * xZeroOne, 1)
+      )
+    );
+    cancelAnimationFrame(state.dragPlayheadRaf);
+    if (state.audioContext.state !== "running") {
+      // Update the playhead anyway.
+      state.audioProgressZeroOne = thisOffsetXZeroOne;
+      updatePlayhead(state, timelineState, sharedState, playerElements);
+    }
+    state.dragPlayheadRaf = requestAnimationFrame(async () => {
+      state.audioProgressZeroOne = thisOffsetXZeroOne;
+      //state.progressSampleTime = performance.now();
+      setPlaybackTime(thisOffsetXZeroOne, state).then(() => {
         updatePlayhead(state, timelineState, sharedState, playerElements);
-      }
-      state.dragPlayheadRaf = requestAnimationFrame(async () => {
-        state.audioProgressZeroOne = thisOffsetXZeroOne;
-        //state.progressSampleTime = performance.now();
-        setPlaybackTime(thisOffsetXZeroOne, state).then(() => {
-          updatePlayhead(state, timelineState, sharedState, playerElements);
-        });
       });
+    });
   };
 
   const setPlaybackTime = async (offsetZeroOne, state) => {
@@ -3331,6 +3343,10 @@ void main() {
   };
 
   const playAudio = async (state, timelineState, sharedState, playerElements, startAtOffsetZeroOne, stopAtOffsetZeroOne) => {
+    if (state.audioDuration - (state.audioProgressZeroOne * state.audioDuration) < 0.05) {
+      // We're right at the end of the clip, so restart playback at the beginning
+      state.audioProgressZeroOne = 0;
+    }
     if (state.playing) {
       pauseAudio(state, timelineState, sharedState, playerElements);
     }
@@ -3423,7 +3439,7 @@ void main() {
         state.audioProgressZeroOne = lastProgress;
       }
     }
-    const playheadWidth = Math.min(2, 1.5);
+    const playheadWidth = 1.5 * Math.min(1, devicePixelRatio / 2);
     const progress = state.audioProgressZeroOne;
     playheadCanvasCtx.clearRect(0, 0, playheadCanvasCtx.canvas.width, playheadCanvasCtx.canvas.height);
     mainPlayheadCanvasCtx.clearRect(0, 0, mainPlayheadCanvasCtx.canvas.width, mainPlayheadCanvasCtx.canvas.height);
@@ -3435,7 +3451,7 @@ void main() {
         playheadCanvasCtx.fillStyle = timelineState.isDarkTheme ? `rgba(204, 204, 204, 0.8)` : `rgba(0, 0, 0, 0.8)`;
 
         // Draw the global playhead position
-        const left = Math.min(width - playheadWidth - 1, Math.max(-playheadWidth / 2, progress * width - playheadWidth/2));
+        const left = Math.min(width - playheadWidth - 1, Math.max(-playheadWidth / 2, progress * width - playheadWidth / 2));
         playheadCanvasCtx.fillRect(left, 0, playheadWidth, height);
       }
       {
@@ -3743,25 +3759,28 @@ void main() {
   }
   #controls {   
     display: flex;                   
-    background: lightslategray;
+    background: #333;
   }
   #controls.disabled {
     pointer-events: none;
   }
   #default-controls {
-    padding: 10px;
+    position: relative;
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
   }
   .control-button {
     all: unset;
     width: 44px;
     height: 44px;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     justify-content: center;
-    background: azure;
-    border: 1px solid darkslateblue;
+    align-items: center;
+    background: transparent;
     border-radius: 3px;
-    color: darkslateblue;
+    color: #ccc;   
   }
   .play-toggle.paused > .pause-icon {
     display: none;
@@ -3818,6 +3837,149 @@ void main() {
       transform: rotate(360deg);
     }
   }
+  
+  .left-controls {
+    display: flex;   
+    font-family: sans-serif;
+    color: #ccc;
+    align-items: center;
+  }
+  .right-controls {
+    display: flex;
+  }
+  .time-elapsed {
+    display: inline-flex;
+    line-height: 0;
+    font-size: 14px;
+  }
+  
+  .additional-controls {
+    position: absolute;
+    right: 5px;
+    bottom: 45px;
+    box-shadow: rgba(0, 0, 0, 0.5) 0 2px 3px;
+    z-index: 1;   
+    background: #333;
+    color: #ccc;
+    font-family: Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.2rem;
+    max-width: 192px;
+    padding-bottom: 8px;
+    display: none;
+  }
+  .additional-controls.show {
+      display: block;
+  }
+  
+  .additional-controls .btn {
+    display: flex;
+    height: 44px;
+    line-height: 44px;
+    padding: 0 10px;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .additional-controls .palettes {
+    display: flex;
+    flex-direction: column;
+  }
+  .additional-controls .palettes > .svg-tick {
+    display: none;
+  }
+  .additional-controls .palettes canvas {
+    border-radius: 2px;
+    margin: 0 8px;
+    width: 16px;
+    height: 16px;
+  }
+  .fullscreen-toggle {
+    display: none;
+  }
+  .fullscreen-toggle.allow-fullscreen {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;  
+  }
+  
+  /* Palette controls (radiogroup) */
+  .radio-custom {
+    opacity: 0;
+    position: absolute;   
+  }
+  
+  .radio-custom, .radio-custom-label {
+    display: inline-block;
+    vertical-align: middle;
+    margin: 5px;
+    cursor: pointer;
+  }
+  
+  .radio-custom-label {
+    line-height: 100%;
+    padding-left: 8px;
+    display: flex;
+    align-content: center;
+    position: relative;
+    text-transform: uppercase;
+    align-items: center;
+    font-size: 12px;
+  }
+  .radio-custom-label > .svg-tick {
+    margin-left: 5px;
+  }
+  .radio-custom:not(:checked) + .radio-custom-label > .svg-tick {
+    opacity: 0;
+  }
+  
+  .radio-custom:checked + .radio-custom-label > .svg-tick {  
+    opacity: 1;
+  }
+  
+  /* Toggle style checkboxes */
+  .additional-controls input[type=checkbox]{
+    height: 0;
+    width: 0;
+    visibility: hidden;
+  }
+
+  .additional-controls input[type=checkbox] + label {
+    cursor: pointer;
+    text-indent: -9999px;
+    width: 32px;
+    height: 16px;
+    background: #666;
+    display: block;
+    border-radius: 16px;
+    position: relative;
+  }
+
+  .additional-controls input[type=checkbox] + label:after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    background: #333;
+    border-radius: 12px;
+    transition: 0.3s;
+  }
+
+  .additional-controls input[type=checkbox]:checked + label {
+    background: #ccc;
+  }
+
+  .additional-controls input[type=checkbox]:checked + label:after {
+    left: calc(100% - 2px);
+    transform: translateX(-100%);
+  }
+
+  .additional-controls input[type=checkbox] + label:active:after {
+    width: 20px;
+  } 
+  
 </style>
 <div id="container">
   <div id="spectrogram-container">
@@ -3851,10 +4013,43 @@ void main() {
   <div id="controls">
     <slot name="player-controls">
       <div id="default-controls">
-        <button class="play-toggle control-button paused" disabled id="play-button">
-          <svg class="play-icon" xmlns="http://www.w3.org/2000/svg" height="1em" viewBox="0 0 384 512"><path fill="currentColor" d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg>
-          <svg class="pause-icon" xmlns="http://www.w3.org/2000/svg" height="1em" viewBox="0 0 320 512"><path fill="currentColor" d="M48 64C21.5 64 0 85.5 0 112V400c0 26.5 21.5 48 48 48H80c26.5 0 48-21.5 48-48V112c0-26.5-21.5-48-48-48H48zm192 0c-26.5 0-48 21.5-48 48V400c0 26.5 21.5 48 48 48h32c26.5 0 48-21.5 48-48V112c0-26.5-21.5-48-48-48H240z"/></svg>
-        </button>
+        <div class="left-controls">
+          <button class="play-toggle control-button paused" disabled id="play-button">
+            <svg class="play-icon" xmlns="http://www.w3.org/2000/svg" height="1em" viewBox="0 0 384 512"><path fill="currentColor" d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg>
+            <svg class="pause-icon" xmlns="http://www.w3.org/2000/svg" height="1em" viewBox="0 0 320 512"><path fill="currentColor" d="M48 64C21.5 64 0 85.5 0 112V400c0 26.5 21.5 48 48 48H80c26.5 0 48-21.5 48-48V112c0-26.5-21.5-48-48-48H48zm192 0c-26.5 0-48 21.5-48 48V400c0 26.5 21.5 48 48 48h32c26.5 0 48-21.5 48-48V112c0-26.5-21.5-48-48-48H240z"/></svg>
+          </button>
+          <span class="time-elapsed"></span>
+        </div>
+        <div class="right-controls">            
+          <div class="show-additional-controls control-button">
+            <svg width="19.04" xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 0 19.04 20" fill="currentColor">
+              <path d="M8.345,20C7.895,20,7.507,19.85,7.182,19.55C6.857,19.250,6.662,18.883,6.595,18.45L6.370,16.8C6.153,16.717,5.949,16.617,5.757,16.5C5.566,16.383,5.378,16.258,5.195,16.125L3.645,16.775C3.228,16.958,2.812,16.975,2.395,16.825C1.978,16.675,1.653,16.408,1.420,16.025L0.245,13.975C0.012,13.592,-0.055,13.183,0.045,12.750C0.145,12.317,0.370,11.958,0.720,11.675L2.045,10.675C2.028,10.558,2.020,10.446,2.020,10.338L2.020,9.662C2.020,9.554,2.028,9.442,2.045,9.325L0.720,8.325C0.370,8.042,0.145,7.683,0.045,7.250C-0.055,6.817,0.012,6.408,0.245,6.025L1.420,3.975C1.653,3.592,1.978,3.325,2.395,3.175C2.812,3.025,3.228,3.042,3.645,3.225L5.195,3.875C5.378,3.742,5.570,3.617,5.770,3.5C5.970,3.383,6.170,3.283,6.370,3.200L6.595,1.550C6.662,1.117,6.857,0.75,7.182,0.45C7.507,0.150,7.895,0,8.345,0L10.695,0C11.145,0,11.533,0.15,11.857,0.45C12.182,0.75,12.378,1.117,12.445,1.55L12.670,3.2C12.887,3.283,13.091,3.383,13.283,3.5C13.474,3.617,13.662,3.742,13.845,3.875L15.395,3.225C15.812,3.042,16.228,3.025,16.645,3.175C17.062,3.325,17.387,3.592,17.62,3.975L18.795,6.025C19.028,6.408,19.095,6.817,18.995,7.250C18.895,7.683,18.670,8.042,18.320,8.325L16.995,9.325C17.012,9.442,17.02,9.554,17.02,9.662L17.020,10.338C17.020,10.446,17.003,10.558,16.97,10.675L18.295,11.675C18.645,11.958,18.87,12.317,18.970,12.75C19.07,13.183,19.003,13.592,18.77,13.975L17.57,16.025C17.337,16.408,17.012,16.675,16.595,16.825C16.178,16.975,15.762,16.958,15.345,16.775L13.845,16.125C13.662,16.258,13.47,16.383,13.27,16.5C13.07,16.617,12.87,16.717,12.67,16.8L12.445,18.45C12.378,18.883,12.182,19.250,11.857,19.55C11.533,19.850,11.145,20,10.695,20L8.345,20ZL8.345,20ZM8.520,18L10.495,18L10.845,15.35C11.362,15.217,11.841,15.021,12.283,14.763C12.724,14.504,13.128,14.192,13.495,13.825L15.97,14.850L16.945,13.15L14.795,11.525C14.878,11.292,14.937,11.046,14.97,10.787C15.003,10.529,15.02,10.267,15.02,10C15.020,9.733,15.003,9.471,14.97,9.213C14.937,8.954,14.878,8.708,14.795,8.475L16.945,6.850L15.97,5.15L13.495,6.2C13.128,5.817,12.724,5.496,12.283,5.237C11.841,4.979,11.362,4.783,10.845,4.65L10.52,2L8.545,2L8.195,4.65C7.678,4.783,7.199,4.979,6.757,5.237C6.316,5.496,5.912,5.808,5.545,6.175L3.07,5.15L2.095,6.85L4.245,8.45C4.162,8.7,4.103,8.95,4.07,9.2C4.037,9.45,4.02,9.717,4.02,10C4.02,10.267,4.037,10.525,4.07,10.775C4.103,11.025,4.162,11.275,4.245,11.525L2.095,13.15L3.07,14.85L5.545,13.8C5.912,14.183,6.316,14.504,6.757,14.763C7.199,15.021,7.678,15.217,8.195,15.35L8.52,18ZL8.52,18ZM9.570,13.5C10.537,13.5,11.362,13.158,12.045,12.475C12.728,11.792,13.07,10.967,13.07,10C13.07,9.033,12.728,8.208,12.045,7.525C11.362,6.842,10.537,6.5,9.57,6.5C8.587,6.5,7.757,6.842,7.083,7.525C6.408,8.208,6.07,9.033,6.07,10C6.07,10.967,6.408,11.792,7.083,12.475C7.757,13.158,8.587,13.5,9.57,13.5ZL9.570,13.5Z" />
+            </svg>
+          </div>                 
+          <div class="additional-controls">
+            <div class="btn">
+              <span>Frequency scale</span>
+              <input type="checkbox" id="freq-switch" /><label for="freq-switch">Toggle</label>
+            </div>
+            <div class="btn">
+              <span>Time scale</span>
+              <input type="checkbox" id="time-switch" /><label for="time-switch">Toggle</label>
+            </div>
+            <div class="btn">
+              <span>Palette</span>
+            </div>
+            <div class="palettes">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" class="svg-tick" fill="currentColor">                           
+                <path d="M9.550,15.150L18.025,6.675C18.225,6.475,18.458,6.375,18.725,6.375C18.992,6.375,19.225,6.475,19.425,6.675C19.625,6.875,19.725,7.113,19.725,7.388C19.725,7.663,19.625,7.900,19.425,8.100L10.250,17.300C10.050,17.500,9.817,17.600,9.550,17.600C9.283,17.600,9.050,17.500,8.850,17.300L4.550,13.000C4.350,12.800,4.254,12.563,4.263,12.288C4.271,12.013,4.375,11.775,4.575,11.575C4.775,11.375,5.013,11.275,5.288,11.275C5.563,11.275,5.800,11.375,6.000,11.575L9.550,15.150Z"></path>                                        
+              </svg>
+            </div>                  
+          </div>
+          <button class="fullscreen-toggle control-button">
+            <svg width="20" height="22.1" viewBox="0 0 24 22.1" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+              <path d="M6.6 2.6h-4v3H0V0h6.6v2.6ZM17.4 0H24v5.6h-2.6v-3h-4V0Zm0 19.5h4v-3H24V22h-6.6v-2.6ZM6.6 22.1H0v-5.6h2.6v3h4v2.6Z" />
+            </svg>
+          </button>   
+        </div>
       </div>
     </slot>
   </div>
@@ -3984,6 +4179,18 @@ void main() {
       this.setAttribute("time-scale", newValue);
     }
 
+    get allowFullscreen() {
+      if (this.hasAttribute("allow-fullscreen")) {
+        const fullscreen = this.getAttribute("allow-fullscreen");
+        return fullscreen !== "false" && fullscreen !== "0" && fullscreen !== null;
+      }
+      return false;
+    }
+
+    set allowFullscreen(newValue) {
+      this.setAttribute("allow-fullscreen", newValue);
+    }
+
     get frequencyScale() {
       if (this.hasAttribute("frequency-scale")) {
         const scale = this.getAttribute("frequency-scale");
@@ -3998,7 +4205,7 @@ void main() {
 
     get colorScheme() {
       return (
-        this.getAttribute("color-scheme") || this.getAttribute("colour-scheme")
+        this.getAttribute("color-scheme") || this.getAttribute("colour-scheme") || Object.keys(COLOR_MAPS)[0]
       );
     }
 
@@ -4204,7 +4411,7 @@ void main() {
                   // Give downstream renderers a moment to adjust to palette changes;
                   clearTimeout(paletteChangeTimeout);
                   paletteChangeTimeout = setTimeout(() => {
-                    timelineState.isDarkTheme = nextPalette !== "Grayscale";
+                    timelineState.isDarkTheme = nextPalette !== "Grey";
                     const startZeroOne = timelineState.left;
                     const endZeroOne = timelineState.right;
                     const top = timelineState.top;
@@ -4235,12 +4442,15 @@ void main() {
                   const top = timelineState.top;
                   const bottom = timelineState.bottom;
                   // Is the incoming y within the clampedRangeY?
-                  const maxYZoom =
-                    (TEXTURE_HEIGHT / (canvas.height / window.devicePixelRatio)) *
-                    MAX_ZOOMED_REGION;
+                  // FIXME: In the shader, we need to do this also so that the texture stretches correctly.
+                  const maxTextureHeight = Math.max(canvas.height, TEXTURE_HEIGHT);
+                  const maxZoom = (maxTextureHeight / (canvas.height / window.devicePixelRatio));
+                  const maxYZoom = maxZoom * MAX_ZOOMED_REGION;
+                  // const maxYZoom =
+                  //   (TEXTURE_HEIGHT / (canvas.height / window.devicePixelRatio)) *
+                  //   MAX_ZOOMED_REGION;
                   const rangeY = top - bottom;
-                  const minRangeY =
-                    1 / (TEXTURE_HEIGHT / (canvas.height / window.devicePixelRatio));
+                  const minRangeY = 1 / maxZoom;
 
                   // The input height of the selected region.
                   const clampedRangeY = Math.max(rangeY, minRangeY);
@@ -4273,9 +4483,10 @@ void main() {
                   let y = 1 - Math.min(1, Math.max(0, yZeroOne));
                   const top = timelineState.top;
                   const bottom = timelineState.bottom;
-                  const maxZoom =
-                    1024 / (this.timelineElements.canvas.height / devicePixelRatio);
-                  const maxYZoom = maxZoom * 0.8;
+
+                  const maxTextureHeight = Math.max(canvas.height, TEXTURE_HEIGHT);
+                  const maxZoom = (maxTextureHeight / (canvas.height / window.devicePixelRatio));
+                  const maxYZoom = maxZoom * MAX_ZOOMED_REGION;
                   const minRangeY = 1.0 / maxZoom;
                   const rangeY = top - bottom;
                   const clampedRangeY = Math.max(rangeY, minRangeY);
@@ -4307,6 +4518,7 @@ void main() {
                 };
                 let cropAmountTop = 0;
                 const clampZeroOne = (x) => Math.max(0, Math.min(1, x));
+                const clampZeroMax = (x, max) => Math.max(0, Math.min(max, x));
                 const redrawTimescaleOverlay = (
                   ctx,
                   startZeroOne,
@@ -4329,63 +4541,79 @@ void main() {
 
                   //console.log("distanceBetweenSecondNotches", distanceBetweenSecondNotches, drawEveryOtherSecond);
                   const tenPx = 10 * devicePixelRatio;
+                  const twentyPx = tenPx * 2;
+                  const fortyPx = tenPx * 4;
                   ctx.font = `${tenPx}px sans-serif`;
                   ctx.textAlign = "center";
                   let xOpacity = 0.5;
-                  let pX = 0;
+                  const n1 = mapRange(0 / duration, startZeroOne, endZeroOne, 0, 1) *
+                    ctx.canvas.width / devicePixelRatio;
+                  const n2 = mapRange(1 / duration, startZeroOne, endZeroOne, 0, 1) *
+                    ctx.canvas.width / devicePixelRatio;
+                  const distanceBetweenSecondNotches = n2 - n1;
+                  const maxOpacity = 0.5;
+                  const breakPointsPx = [2, 4, 8, 16, 32, 64, 128, 256];
+                  // Work out the zoom levels these correspond to:
                   for (let i = startSeconds; i < endSeconds; i += 1) {
-                    const oX =
-                      mapRange(i / duration, startZeroOne, endZeroOne, 0, 1) *
-                      ctx.canvas.width;
-                    const distanceBetweenSecondNotches = oX - pX;
-                    pX = oX;
-                    if (i !== 0) {
-                      if (this.drawFrequencyScale) {
-                        xOpacity = Math.min(
-                          0.5,
-                          clampZeroOne(
-                            mapRange(
-                              oX,
-                              ctx.canvas.width - tenPx * 10,
-                              ctx.canvas.width,
-                              0.5,
-                              0
-                            )
-                          )
-                        );
-                      }
-                      ctx.fillStyle = `rgba(255, 255, 255, ${xOpacity})`;
-                      ctx.fillRect(oX, 0, 1, ctx.canvas.height / 2);
-                      const minDistanceBetweenSecondNotches = 15 * devicePixelRatio;
-                      // TODO: Generalise this
-
-                      // Don't draw labels too close together.
-                      const isOdd = i % 2 === 1;
-                      if (!isOdd) {
-                        const distance = Math.min(
-                          30 * devicePixelRatio,
-                          distanceBetweenSecondNotches
-                        );
-                        const opacity = clampZeroOne(
-                          mapRange(
-                            distance,
-                            15 * devicePixelRatio,
-                            30 * devicePixelRatio,
-                            0,
-                            1
-                          )
-                        );
-                        ctx.fillStyle = `rgba(255, 255, 255, ${xOpacity * opacity})`;
-                      }
-                      // TODO: For clips longer than a minute, should have 1m35s notation?
-                      if (oX + tenPx < ctx.canvas.width) {
-                        ctx.fillText(`${i}s`, oX, ctx.canvas.height / 2 + tenPx);
+                    const m0 = (i) % 64 === 0;
+                    const m1 = (i) % 32 === 0;
+                    const m2 = (i) % 16 === 0;
+                    const m3 = (i) % 8 === 0;
+                    const m4 = (i) % 4 === 0;
+                    const m5 = (i) % 2 === 0;
+                    let displayNotch = false;
+                    let initialXOpacity = 0;
+                    if (distanceBetweenSecondNotches < breakPointsPx[0]) { // display a notch every 16 px
+                      displayNotch = m0;
+                    } else if (distanceBetweenSecondNotches < breakPointsPx[1]) {
+                      displayNotch = m0 || m1;
+                    } else if (distanceBetweenSecondNotches < breakPointsPx[2]) {
+                      displayNotch = m0 || m1 || m2;
+                    } else if (distanceBetweenSecondNotches < breakPointsPx[3]) {
+                      displayNotch = m0 || m1 || m2 || m3;
+                    } else if (distanceBetweenSecondNotches < breakPointsPx[4]) {
+                      displayNotch = m0 || m1 || m2 || m3 || m4;
+                    } else if (distanceBetweenSecondNotches < breakPointsPx[5]) {
+                      displayNotch = m0 || m1 || m2 || m3 || m4 || m5;
+                    } else {
+                      displayNotch = true;
+                    }
+                    if (displayNotch) {
+                      if (m0) {
+                        initialXOpacity = maxOpacity;
+                      } else if (m1) {
+                        initialXOpacity = clampZeroMax(mapRange(distanceBetweenSecondNotches, breakPointsPx[0], breakPointsPx[1], 0, maxOpacity), maxOpacity);
+                      } else if (m2) {
+                        initialXOpacity = clampZeroMax(mapRange(distanceBetweenSecondNotches, breakPointsPx[1], breakPointsPx[2], 0, maxOpacity), maxOpacity);
+                      } else if (m3) {
+                        initialXOpacity = clampZeroMax(mapRange(distanceBetweenSecondNotches, breakPointsPx[2], breakPointsPx[3], 0, maxOpacity), maxOpacity);
+                      } else if (m4) {
+                        initialXOpacity = clampZeroMax(mapRange(distanceBetweenSecondNotches, breakPointsPx[3], breakPointsPx[4], 0, maxOpacity), maxOpacity);
+                      } else if (m5) {
+                        initialXOpacity = clampZeroMax(mapRange(distanceBetweenSecondNotches, breakPointsPx[4], breakPointsPx[5], 0, maxOpacity), maxOpacity);
+                      } else {
+                        initialXOpacity = clampZeroMax(mapRange(distanceBetweenSecondNotches, breakPointsPx[5], breakPointsPx[6], 0, maxOpacity), maxOpacity);
                       }
                     }
-                    // TODO: Spacing and zoom level of elements should also be proportionate to how close together they are
-                    //  because of audio duration.
+                    // Work out whether we want to draw this notch or not at this zoom level.
+                    if (i !== 0 && displayNotch) {
+                      const oX =
+                        mapRange(i / duration, startZeroOne, endZeroOne, 0, 1) *
+                        ctx.canvas.width;
+                      xOpacity = initialXOpacity;
+                      if (this.drawFrequencyScale && oX > canvas.width - fortyPx) {
+                        xOpacity = clampZeroOne(mapRange(oX, canvas.width - fortyPx, canvas.width - twentyPx, 1, 0)) * initialXOpacity;
+                      }
+                      ctx.fillStyle = `rgba(255, 255, 255, ${xOpacity})`;
+                      // Draw notches
+                      ctx.fillRect(oX, 0, 1, ctx.canvas.height / 2);
+                      ctx.fillStyle = `rgba(255, 255, 255, ${xOpacity})`;
+                      ctx.fillText(this.formatTime(i), oX, ctx.canvas.height / 2 + tenPx);
+
+                    }
+                    // Drawing inter-second notches
                     const opacity = clampZeroOne(
-                      mapRange(1 - zoomLevel, 0.25, 1, 0, 1)
+                      mapRange(distanceBetweenSecondNotches, breakPointsPx[6], breakPointsPx[7], 0, 1)
                     );
                     if (opacity > 0) {
                       ctx.fillStyle = `rgba(255, 255, 255, ${opacity * xOpacity})`;
@@ -4406,14 +4634,6 @@ void main() {
                       }
                     }
                   }
-
-                  // for (let i = startSeconds; i < endSeconds; i += 1) {
-                  //   const offsetX = ((i / duration)) * ctx.canvas.width;
-                  //   console.log(i, offsetX);
-                  //   ctx.fillRect(offsetX, 0, 1, ctx.canvas.height);
-                  //
-                  // }
-
                   ctx.restore();
                 };
                 this.redrawTimescaleOverlay = () =>
@@ -4645,6 +4865,7 @@ void main() {
       // TODO: Maybe pass in min/max frequency bounds, so that the view is restricted to AOI?
       // TODO: Get height dynamically from attributes, and respond to changes in height.
       const lazyLoad = this.hasAttribute("lazy");
+      const allowFullscreen = this.hasAttribute("allow-fullscreen");
       const totalHeight = this.height || 360;
       this.timelineHeight = Math.min(60, Math.max(44, totalHeight - 200));
       this.spectrogramHeight = totalHeight - this.timelineHeight;
@@ -4668,6 +4889,133 @@ void main() {
       const userOverlayCanvas = root.getElementById("user-overlay-canvas");
       const playheadCanvas = root.getElementById("playhead-canvas");
       const timelineUICanvas = root.getElementById("timeline-ui-canvas");
+
+      this.formatTime = (time) => {
+        let seconds = Math.floor(time);
+        if (seconds < 60) {
+          return `0:${`${seconds}`.padStart(2, "0")}`;
+        }
+        const minutes = Math.floor(seconds / 60);
+        seconds = seconds - minutes * 60;
+        return `${minutes}:${seconds.toString().padStart(2, "0").padEnd(2, "0")}`;
+      };
+
+      const setupDefaultControls = () => {
+        const additionalControls = root.querySelector(".additional-controls");
+        const showAdditionalControlsBtn = root.querySelector(".show-additional-controls");
+        const timeElapsed = root.querySelector(".time-elapsed");
+        const fullscreenToggleBtn = root.querySelector(".fullscreen-toggle");
+        if (allowFullscreen) {
+          fullscreenToggleBtn.classList.add("allow-fullscreen");
+          const initialHeight = this.height;
+          const spectastiq = this;
+          const uiHeight = 44;
+          const exitFullscreen = () => {
+            if (!document.fullscreenElement) {
+              spectastiq.height = initialHeight;
+              window.removeEventListener("fullscreenchange", exitFullscreen);
+            }
+          };
+          fullscreenToggleBtn.addEventListener("click", () => {
+            if (!document.fullscreenElement) {
+              document.documentElement.requestFullscreen().catch(err => {
+                console.log(`Error attempting to enable fullscreen: ${err.message}`);
+              }).then(() => {
+                window.addEventListener("fullscreenchange", exitFullscreen);
+                spectastiq.height = window.screen.height - uiHeight;
+              });
+            } else {
+
+              document.exitFullscreen().then(exitFullscreen);
+            }
+          });
+        }
+        root.addEventListener("playhead-update", e => {
+          timeElapsed.textContent = `${this.formatTime(e.detail.timeInSeconds)} / ${this.formatTime(this.timeline.timelineState.audioState.audioDuration)}`;
+        });
+
+        let showingAdditionalControls = false;
+        const hideAdditionalControls = () => {
+          showingAdditionalControls = false;
+          additionalControls.classList.remove("show");
+        };
+
+        // Handle clicks outside the web component
+        document.addEventListener("click", (e) => {
+          if (showingAdditionalControls && e.target !== this.shadowRoot.host) {
+            hideAdditionalControls();
+          }
+        });
+
+        this.shadowRoot.addEventListener("click", (e) => {
+          // Handle clicks inside the web component that aren't the menu
+          if (showingAdditionalControls &&
+            !additionalControls.contains(e.target) &&
+            !showAdditionalControlsBtn.contains(e.target)) {
+            hideAdditionalControls();
+          }
+        });
+
+        showAdditionalControlsBtn.addEventListener("click", () => {
+          showingAdditionalControls = !showingAdditionalControls;
+          additionalControls.classList.toggle("show");
+        });
+
+        const freqSwitch = root.getElementById("freq-switch");
+        if (this.frequencyScale) {
+          freqSwitch.setAttribute("checked", "checked");
+        }
+        // TODO: If frequencyScale is changed programmatically, we might want to sync the state here.
+        freqSwitch.addEventListener("change", () => {
+          this.frequencyScale = freqSwitch.checked.toString();
+        });
+        const timeSwitch = root.getElementById("time-switch");
+        if (this.timeScale) {
+          timeSwitch.setAttribute("checked", "checked");
+        }
+        timeSwitch.addEventListener("change", () => {
+          this.timeScale = timeSwitch.checked.toString();
+        });
+        const palettes = root.querySelector(".palettes");
+        const svgTick = palettes.querySelector('.svg-tick');
+        for (const [color, gradient] of Object.entries(COLOR_MAPS)) {
+          const button = document.createElement("input");
+          button.type = "radio";
+          button.name = "palette-group";
+          button.id = `palette-${color}`;
+          button.classList.add("radio-custom");
+
+          const label = document.createElement("label");
+          label.setAttribute("for", button.id);
+          label.classList.add("radio-custom-label");
+          const icon = document.createElement("canvas");
+          icon.width = 16 * devicePixelRatio;
+          icon.height = 16 * devicePixelRatio;
+          label.appendChild(icon);
+          const labelText = document.createElement("span");
+          labelText.textContent = color;
+          label.appendChild(labelText);
+          label.appendChild(svgTick.cloneNode(true));
+          palettes.appendChild(button);
+          palettes.appendChild(label);
+          if (this.colorScheme.toLowerCase() === color) {
+            button.setAttribute("checked", "checked");
+          }
+          const ctx = icon.getContext("2d");
+          for (let y = 0; y < icon.height; y++) {
+            const slot = (y / icon.height) * gradient.length;
+            const color = gradient[Math.floor(slot)];
+            ctx.fillStyle = `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`;
+            ctx.fillRect(0, y, icon.width, 1);
+          }
+          button.addEventListener("change", () => {
+            this.colorScheme = color;
+          });
+        }
+        // Init palette options.
+      };
+
+      setupDefaultControls();
 
       if (!(src && !this.inited)) {
         container.classList.add("no-src");
@@ -4785,7 +5133,7 @@ void main() {
           : "rgba(0, 0, 0, 0.85)";
         //start at bottom?
         ctx.strokeStyle = divisionColor;
-        ctx.lineWidth = 1;
+        ctx.lineWidth = Math.max(1, devicePixelRatio / 2);
         ctx.textAlign = "right";
         ctx.textBaseline = "bottom";
         ctx.fillStyle = textColor;

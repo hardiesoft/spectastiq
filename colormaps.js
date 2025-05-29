@@ -1,4 +1,3 @@
-
 export const VIRIDIS = [
   [0.267004, 0.004874, 0.329415],
   [0.268510, 0.009605, 0.335427],
@@ -256,7 +255,7 @@ export const VIRIDIS = [
   [0.974417, 0.903590, 0.130215],
   [0.983868, 0.904867, 0.136897],
   [0.993248, 0.906157, 0.143936],
-].flat();
+];
 
 export const MAGMA = [
   [0.001462, 0.000466, 0.013866],
@@ -515,7 +514,7 @@ export const MAGMA = [
   [0.987691, 0.977154, 0.734536],
   [0.987387, 0.984288, 0.742002],
   [0.987053, 0.991438, 0.749504]
-].flat();
+];
 
 export const PLASMA = [
   [0.050383, 0.029803, 0.527975],
@@ -774,7 +773,7 @@ export const PLASMA = [
   [0.944152, 0.961916, 0.146861],
   [0.941896, 0.968590, 0.140956],
   [0.940015, 0.975158, 0.131326]
-].flat();
+];
 export const INFERNO = [
   [0.001462, 0.000466, 0.013866],
   [0.002267, 0.001270, 0.018570],
@@ -1032,25 +1031,7 @@ export const INFERNO = [
   [0.976511, 0.989753, 0.616760],
   [0.982257, 0.994109, 0.631017],
   [0.988362, 0.998364, 0.644924]
-].flat();
-const grayscale = () => {
-  const scale = [];
-  for (let i = 0; i < 256; i++) {
-    const val = i / 256;
-    scale.push([val, val, val]);
-  }
-  return scale;
-};
-const grayscaleSquared = () => {
-  const scale = [];
-  for (let i = 0; i < 256; i++) {
-    let val = i / 256;
-    val = val * val;
-    scale.push([val, val, val]);
-  }
-  return scale;
-};
-
+];
 const grayscaleInverted = () => {
   const scale = [];
   for (let i = 0; i < 256; i++) {
@@ -1060,17 +1041,11 @@ const grayscaleInverted = () => {
   }
   return scale;
 };
-const grayscaleInvertedSquared = () => {
-  const scale = [];
-  for (let i = 0; i < 256; i++) {
-    let val = 1 - (i / 256)
-    val = val * val;
-    scale.push([val, val, val]);
-  }
-  return scale;
-};
-export const GRAYSCALE = grayscale().flat();
-export const GRAYSCALE_SQUARED = grayscaleSquared().flat();
-export const GRAYSCALE_INVERTED = grayscaleInverted().flat();
-export const GRAYSCALE_SQUARED_INVERTED = grayscaleInvertedSquared().flat();
+export const GRAYSCALE_INVERTED = grayscaleInverted();
 // More maps: https://github.com/bpostlethwaite/colormap/tree/master/res/res
+export const COLOR_MAPS = {
+  plasma: PLASMA,
+  viridis: VIRIDIS,
+  grey: GRAYSCALE_INVERTED,
+  inferno: INFERNO,
+};
