@@ -68,6 +68,7 @@ pre {
   background: #e6b4ff22;
   border-radius: 0.4rem;
   padding: 1rem;
+  overflow-x: auto;
 }
 
 code {

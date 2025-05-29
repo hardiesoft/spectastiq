@@ -3,81 +3,93 @@
 <head>
   <meta charset="UTF-8">
   <title>Spectastiq | Interactive spectrogram renderer and audio player optimised for touch devices</title>
-  <link rel="stylesheet" href="assets/css/style.css" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="assets/css/style.css"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <!--
     If the example is not served from a secure context that opts into `SharedArrayBuffer`,
     this serves resources with those headers set.
    -->
-  <script src="./enable-threads.js" crossorigin></script>
-  <script type="module" src="./spectastiq.js" crossorigin></script>
+  <script src="https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq@latest/spectastiq.min.js"></script>
 </head>
 <body>
-  <div class="main">
-    <div class="header">
-      <div class="logo">
-        <img src="assets/img/spectastiq_logo.svg" alt="Spectastiq | Interactive spectrogram renderer and audio player optimised for touch devices" />
-        <h1 class="visually-hidden">Spectastiq</h1>
-        <h2 class="visually-hidden">Interactive spectrogram renderer and audio player optimised for touch devices</h2>
-      </div>
-    </div>
-    <div class="content">
-      <div class="section">
-        <h1>Usage</h1>
-        <p>Spectastiq is available as a web-component, which means that you can include the javascript file in the HTML page where you'd like to use it, and then instantiate it using a custom HTML tag.</p>
-
-        <pre>&lt;script type="module" src="/path/to/spectastiq.js"&gt;&lt;/script&gt;
-&lt;spectastiq-viewer src="/path/to/audio/my-audio-file.mp3"&gt;
-  &lt;div slot="player-controls"&gt;
-    &lt;button>My custom button&lt;/button&gt;
-  &lt;/div&gt;
-&lt;/spectastiq-viewer&gt;</pre>
-
-        <p>That's it! Spectastiq will try to fit itself to the parent HTML element of the <code>&lt;spectastiq-viewer&gt;</code> tag.</p>
-        <div class="container">
-          <spectastiq-viewer id="spectastiq" src="robin-1.wav"></spectastiq-viewer>
-        </div>
-      </div>
-
-      <div class="section" id="examples">
-        <h1>Examples</h1>
-
-        <ul class="examples">
-            <li><a href="#"><span>Color palettes</span></a></li>
-            <li><a href="#"><span>Drawing regions of interest</span></a></li>
-            <li><a href="#"><span>UI controls</span></a></li>
-        </ul>
-      </div>
-
-      <div class="section">
-        <h1>Roadmap</h1>
-
-        <ul>
-          <li>More advanced interpolation of already rendered spectrogram fragments for a smoother interactive experience.</li>
-          <li>Support displaying your spectrograms with a logarithmic scale.</li>
-          <li>VueJS and React wrappers + examples.</li>
-        </ul>
-      </div>
-
-      <div class="section">
-        <h1>Known issues</h1>
-
-        <p>To best support longer clips, it's necessary to serve spectastiq from a "secure context", which means that you need to set some headers on the files that your web-server delivers to your users. This enables an advanced JavaScript feature called <code>SharedArrayBuffer</code>, which helps spectastiq to use all your computers power to render spectrograms really fast, and also reduces memory usage which seems to otherwise trigger browser bugs on resource-constrained mobile devices (Chrome Android on a Lenovo Tab M10 with 3GB RAM triggered this).</p>
-      </div>
-    </div>
-    <div class="footer">
-      <p>Spectastiq was developed by Jonathan Hardie, with the help of funding from
-        the <a href="https://brianmasontrust.org/" rel="nofollow" target="_blank">Brian Mason Scientific &amp; Technical Trust</a> and <a href="https://www.cacophony.org.nz/" rel="nofollow" target="_blank">The Cacophony Project</a>.</p>
-      <p class="github">
-        <a href="https://github.com/hardiesoft/spectastiq" rel="nofollow" target="_blank" class="github-link">
-          <img src="assets/img/github-mark-white.svg" width="16" height="16" alt="GitHub logo"> <span>View on GitHub</span>
-        </a>
-      </p>
+<div class="main">
+  <div class="header">
+    <div class="logo">
+      <img src="assets/img/spectastiq_logo.svg"
+           alt="Spectastiq | Interactive spectrogram renderer and audio player optimised for touch devices"/>
+      <h1 class="visually-hidden">Spectastiq</h1>
+      <h2 class="visually-hidden">Interactive spectrogram renderer and audio player optimised for touch devices</h2>
     </div>
   </div>
+  <div class="content">
+    <div class="section">
+      <h1>Basic Usage</h1>
+      <p>Visualise and explore audio recordings in your web browser:</p>
+      <div class="container" style="border-radius: 3px; overflow: hidden;">
+        <spectastiq-viewer
+          src="./assets/audio-examples/bellbird-alarm-calls.flac"
+          height="300"
+          frequency-scale
+          time-scale
+        >
+        </spectastiq-viewer>
 
-  <script>
-    const spectastiq = document.getElementById("spectastiq");
-  </script>
+      </div>
+      <p style="margin-top: 5px; font-size: small; text-align: right">A <a
+        href="https://www.nzbirdsonline.org.nz/species/bellbird"
+        target="_blank" rel="nofollow">New Zealand
+        bellbird</a> <em>freaking out</em> (I believe this is the scientific term)</p>
+      <p>Spectastiq is available as a web-component, which means that you can include the javascript file in the HTML
+        page where you'd like to use it, and then embed as many times as you like using the custom <code>&lt;spectastiq-viewer&gt;</code>
+        HTML tag.</p>
+      <p>To get started quickly, you can include spectastiq from a CDN.</p>
+      <pre>&lt;script src="https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq@latest/spectastiq.min.js"&gt;&lt;/script&gt;
+&lt;spectastiq-viewer src="/path/to/audio/file.mp3"&gt;&lt;/spectastiq-viewer&gt;</pre>
+      <p>That's it! Spectastiq will fit itself to the parent HTML element of the
+        <code>&lt;spectastiq-viewer&gt;</code> tag.</p>
+      <!-- TODO: Buttons here to switch src and have a bellbird being more mellow. -->
+    </div>
+
+    <!--    <div class="section" id="examples">-->
+    <!--      <h1>Examples</h1>-->
+    <!--      <ul class="examples">-->
+    <!--        <li><a href="#"><span>Supported attributes</span></a></li>-->
+    <!--        <li><a href="#"><span>Switching audio files</span></a></li>-->
+    <!--        <li><a href="#"><span>Color palettes</span></a></li>-->
+    <!--        <li><a href="#"><span>Drawing regions of interest</span></a></li>-->
+    <!--        <li><a href="#"><span>Custom UI controls</span></a></li>-->
+    <!--      </ul>-->
+    <!--    </div>-->
+
+    <div class="section">
+      <h1>Roadmap / future enhancements</h1>
+      <ul>
+        <li>More advanced interpolation of already rendered spectrogram fragments for a smoother interactive
+          experience.
+        </li>
+        <li>Unload spectastiq from memory when there are many instances of spectastiq running on a page, and an
+          instance is outside the page viewport.
+        </li>
+        <li>Support displaying your spectrograms with a logarithmic scale.</li>
+        <li>Allow other FFT window sizes. (The current default is 2048 samples)</li>
+        <li>VueJS and React wrappers + examples.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer">
+    <p>Spectastiq was developed by <a href="https://hardiesoft.com" target="_blank" rel="nofollow">Jon Hardie</a>, with
+      the help of funding from
+      the <a href="https://brianmasontrust.org/" rel="nofollow" target="_blank">Brian Mason Scientific &amp; Technical
+        Trust</a> and <a href="https://www.cacophony.org.nz/" rel="nofollow" target="_blank">The Cacophony Project</a>.
+    </p>
+    <!-- Sponsor badge?  -->
+    <p class="github">
+      <a href="https://github.com/hardiesoft/spectastiq" rel="nofollow" target="_blank" class="github-link">
+        <img src="assets/img/github-mark-white.svg" width="16" height="16" alt="GitHub logo">
+        <span>View on GitHub</span>
+      </a>
+    </p>
+  </div>
+</div>
 </body>
 </html>
