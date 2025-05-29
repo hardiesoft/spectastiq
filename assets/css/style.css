@@ -1,0 +1,226 @@
+html, body {
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: #191223;
+  color: #fff;
+  font-size: 62.5%;
+  font-family: "Lexend Deca", sans-serif;
+  font-optical-sizing: auto;
+  font-style: normal;
+}
+
+.main {
+  max-width: 660px;
+  margin: 0 auto;
+  padding: 0 1.6rem;
+}
+
+.logo {
+  padding: 6rem 0;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: #ffca00;
+  margin: 1em 0;
+}
+
+h1 {
+  font-size: 2.4rem;
+}
+
+h2 {
+  font-size: 2.1rem;
+}
+
+h3 {
+  font-size: 1.8rem;
+}
+
+h4 {
+  font-size: 1.6rem;
+}
+
+p, li {
+  font-size: 1.4rem;
+  line-height: 2;
+}
+
+a {
+  color: #e6b4ff;
+  transition: color 0.2s;
+}
+
+a:hover {
+  color: #f2d7ff;
+}
+
+pre {
+  font-size: 1.4rem;
+  background: #e6b4ff22;
+  border-radius: 0.4rem;
+  padding: 1rem;
+}
+
+code {
+  background: #e6b4ff22;
+  border-radius: 0.2rem;
+  padding: 0.2rem;
+}
+
+.section {
+  margin-bottom: 6rem;
+}
+
+.examples {
+  background: #e6b4ff22;
+  list-style: none;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.4rem;
+}
+
+.examples li {
+  border-bottom: 1px solid #191223;
+}
+
+.examples li:last-of-type {
+  border-bottom: none;
+}
+
+.examples li a {
+  padding: 1rem 1rem;
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.examples li a::after {
+  content: " ";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background: url(../img/arrow_forward.svg) no-repeat;
+  margin-left: 0.5rem;
+  transition: margin 0.2s;
+}
+
+.examples li a:hover::after {
+  margin-left: 1rem;
+}
+
+.back-link {
+  text-decoration: none;
+}
+
+.back-link::before {
+  content: " ";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background: url(../img/arrow_back.svg) no-repeat;
+  margin-right: 0.5rem;
+  transition: margin 0.2s;
+}
+
+.footer {
+  margin-top: 6rem;
+  text-align: center;
+}
+
+.footer p {
+  font-size: 1.2rem;
+  line-height: 1.6;
+  color: #ccc;
+}
+
+.github {
+  margin: 3rem 0;
+}
+
+.github-link {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #ccc;
+  text-decoration: none;
+  gap: 0.6rem;
+}
+
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  html {
+    font-size: 53.5715%;
+  }
+}
+
+/* ==========================================================================
+   Helper classes
+   ========================================================================== */
+
+/*
+ * Hide visually and from screen readers
+ */
+
+.hidden,
+[hidden] {
+  display: none !important;
+}
+
+/*
+ * Hide only visually, but have it available for screen readers:
+ * https://snook.ca/archives/html_and_css/hiding-content-for-accessibility
+ *
+ * 1. For long content, line feeds are not interpreted as spaces and small width
+ *    causes content to wrap 1 word per line:
+ *    https://medium.com/@jessebeach/beware-smushed-off-screen-accessible-text-5952a4c2cbfe
+ */
+
+.visually-hidden {
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+  /* 1 */
+}
+
+/*
+ * Extends the .visually-hidden class to allow the element
+ * to be focusable when navigated to via the keyboard:
+ * https://www.drupal.org/node/897638
+ */
+
+.visually-hidden.focusable:active,
+.visually-hidden.focusable:focus {
+  clip: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  position: static;
+  white-space: inherit;
+  width: auto;
+}
+
+/*
+ * Hide visually and from screen readers, but maintain layout
+ */
+
+.invisible {
+  visibility: hidden;
+}
