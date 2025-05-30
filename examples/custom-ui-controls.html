@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/html">
+<head>
+  <meta charset="UTF-8">
+  <title>Spectastiq | Examples – Custom UI controls</title>
+  <link rel="stylesheet" href="/assets/css/style.css"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <script src="https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq@v0.10.0/spectastiq.min.js"></script>
+</head>
+<body>
+<div class="main">
+  <div class="header">
+    <div class="logo">
+      <a href="/" title="Spectastiq homepage">
+        <img src="/assets/img/spectastiq_logo.svg"
+             alt="Spectastiq | Interactive spectrogram renderer and audio player optimised for touch devices"/>
+      </a>
+      <h1 class="visually-hidden">Spectastiq</h1>
+      <h2 class="visually-hidden">Interactive spectrogram renderer and audio player optimised for touch devices</h2>
+    </div>
+  </div>
+  <div class="content">
+    <p><a href="/index.html#examples" class="back-link">View all examples</a></p>
+    <div class="section">
+      <h1>Custom UI controls</h1>
+      <p>You can override the default UI controls provided by spectastiq by nesting html elements inside the <code>&lt;spectastiq-viewer&gt;</code>
+        tag
+        inside an element with the <code>slot</code> attribute set to <code>player-controls</code>. This will replace
+        all default
+        controls and
+        you are now responsible for handling and styling the controls you provide.
+      </p>
+      <spectastiq-viewer src="/assets/audio-examples/bellbird-alarm-calls.flac">
+        <div slot="player-controls">
+          <button style="margin: 5px;">I'm a custom button!</button>
+        </div>
+      </spectastiq-viewer>
+      <pre>&lt;script src="/path/to/spectastiq.js"&gt;&lt;/script&gt;
+&lt;spectastiq-viewer src="/path/to/audio/my-audio.mp3"&gt;
+  &lt;div slot="player-controls"&gt;
+    &lt;button>I'm a custom button!&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/spectastiq-viewer&gt;</pre>
+    </div>
+    <p><a href="/index.html#examples" class="back-link">View all examples</a></p>
+  </div>
+  <div class="footer">
+    <p>Spectastiq was developed by <a href="https://hardiesoft.com" target="_blank" rel="nofollow">Jon Hardie</a>, with
+      the help of funding from
+      the <a href="https://brianmasontrust.org/" rel="nofollow" target="_blank">Brian Mason Scientific &amp; Technical
+        Trust</a> and <a href="https://www.cacophony.org.nz/" rel="nofollow" target="_blank">The Cacophony Project</a>.
+    </p>
+    <!-- Sponsor badge?  -->
+    <p class="github">
+      <a href="https://github.com/hardiesoft/spectastiq" rel="nofollow" target="_blank" class="github-link">
+        <img src="/assets/img/github-mark-white.svg" width="16" height="16" alt="GitHub logo">
+        <span>View on GitHub</span>
+      </a>
+    </p>
+  </div>
+</div>
+</body>
+</html>

@@ -597,11 +597,6 @@ export default (spectastiq, rois) => {
     context.restore();
   };
 
-  spectastiq.addEventListener("ready", () => {
-    // Doesn't work in Chrome?
-    console.log("Registered spectastiq");
-  });
-
   spectastiq.addEventListener("custom-interaction-start", (e) => {
     pointerPositionX = e.detail.offsetX;
     pointerPositionY = e.detail.offsetY;
@@ -858,7 +853,6 @@ export default (spectastiq, rois) => {
       renderOverlay(ctx);
     },
   );
-
 
   // Init interaction handlers.
   const playPauseBtn = spectastiq.querySelector(".play-pause");

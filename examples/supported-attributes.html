@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/html">
+<head>
+  <meta charset="UTF-8">
+  <title>Spectastiq | Examples – Supported attributes</title>
+  <link rel="stylesheet" href="/assets/css/style.css"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <script src="https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq@v0.10.0/spectastiq.min.js"></script>
+</head>
+<body>
+<div class="main">
+  <div class="header">
+    <div class="logo">
+      <a href="/" title="Spectastiq homepage">
+        <img src="/assets/img/spectastiq_logo.svg"
+             alt="Spectastiq | Interactive spectrogram renderer and audio player optimised for touch devices"/>
+      </a>
+      <h1 class="visually-hidden">Spectastiq</h1>
+      <h2 class="visually-hidden">Interactive spectrogram renderer and audio player optimised for touch devices</h2>
+    </div>
+  </div>
+  <div class="content">
+    <p><a href="/index.html#examples" class="back-link">View all examples</a></p>
+    <div class="section">
+      <h1>Supported attributes</h1>
+      <p>The behaviour of spectastiq can be controlled by adding various attributes to the <code>&lt;spectastiq-viewer&gt;</code>
+        tag.</p>
+
+      <p>
+        <code>height="300"</code> Set the height of the spectrogram and zoom region control. This does not include the
+        height of the UI controls.
+      </p>
+      <p>
+        <code>allow-fullscreen</code> Adding this attribute adds a fullscreen toggle to the default UI controls.
+      </p>
+      <p>
+        <code>frequency-scale</code> Adding this attribute shows the frequency scale along the right side the
+        spectrogram by
+        default.
+      </p>
+      <p>
+        <code>time-scale</code> Adding this attribute shows the time scale along the top of the spectrogram by default.
+      </p>
+      <p>
+        <code>color-scheme</code> Set the default color-scheme &mdash; must be one of <code>plasma</code>,
+        <code>viridis</code>, <code>inferno</code>, <code>grey</code>.
+      </p>
+      <p>
+        <pre>&lt;spectastiq-viewer
+  src="/path/to/audio/my-audio.mp3"
+  allow-fullscreen
+  frequency-scale
+  time-scale
+  color-scheme="viridis"
+  height="200"
+&gt;
+&lt;spectastiq-viewer&gt;</pre>
+      </p>
+    </div>
+    <p><a href="/index.html#examples" class="back-link">View all examples</a></p>
+  </div>
+  <div class="footer">
+    <p>Spectastiq was developed by <a href="https://hardiesoft.com" target="_blank" rel="nofollow">Jon Hardie</a>, with
+      the help of funding from
+      the <a href="https://brianmasontrust.org/" rel="nofollow" target="_blank">Brian Mason Scientific &amp; Technical
+        Trust</a> and <a href="https://www.cacophony.org.nz/" rel="nofollow" target="_blank">The Cacophony Project</a>.
+    </p>
+    <!-- Sponsor badge?  -->
+    <p class="github">
+      <a href="https://github.com/hardiesoft/spectastiq" rel="nofollow" target="_blank" class="github-link">
+        <img src="/assets/img/github-mark-white.svg" width="16" height="16" alt="GitHub logo">
+        <span>View on GitHub</span>
+      </a>
+    </p>
+  </div>
+</div>
+</body>
+</html>

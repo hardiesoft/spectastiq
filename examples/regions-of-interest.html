@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/html">
+<head>
+  <meta charset="UTF-8">
+  <title>Spectastiq | Examples – Regions of interest</title>
+  <link rel="stylesheet" href="/assets/css/style.css"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <script src="https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq@v0.10.0/spectastiq.min.js"></script>
+  <style>
+      .custom-controls {
+          padding: 5px;
+          display: flex;
+          gap: 5px;
+      }
+  </style>
+  <script type="module">
+    import roiExtensionExample from "../roi-extension-example.js";
+
+    const rois = [
+      {
+        minFreqHz: 690,
+        maxFreqHz: 3810,
+        start: 88.62,
+        end: 91.36,
+        label: "bellbird"
+      },
+      {
+        minFreqHz: 500,
+        maxFreqHz: 5270,
+        start: 63.95,
+        end: 70.84,
+        label: "bellbird"
+      },
+      {
+        minFreqHz: 1710,
+        maxFreqHz: 5250,
+        start: 7.84,
+        end: 19.71,
+        label: "grey warbler"
+      },
+      {
+        minFreqHz: 5890,
+        maxFreqHz: 11370,
+        start: 0.49,
+        //end: 93.99,
+        end: 90.99,
+        label: "bellbird - juvenile"
+      },
+      {
+        minFreqHz: 1800,
+        maxFreqHz: 9350,
+        start: 71.23,
+        end: 76.51,
+        label: "tomtit"
+      },
+      {
+        minFreqHz: 1910,
+        maxFreqHz: 5460,
+        start: 50.71,
+        end: 53.79,
+        label: "unknown bird"
+      },
+      {
+        minFreqHz: 2600,
+        maxFreqHz: 5160,
+        start: 60.21,
+        end: 63.4,
+        label: "unknown bird"
+      }
+    ];
+    window.addEventListener("load", () => {
+      const spectastiq = document.getElementById("spectastiq");
+      roiExtensionExample(spectastiq, rois);
+
+      const customRois = [];
+      const spectastiq2 = document.getElementById("spectastiq-create");
+      roiExtensionExample(spectastiq2, customRois);
+    });
+  </script>
+</head>
+<body>
+<div class="main">
+  <div class="header">
+    <div class="logo">
+      <a href="/" title="Spectastiq homepage">
+        <img src="/assets/img/spectastiq_logo.svg"
+             alt="Spectastiq | Interactive spectrogram renderer and audio player optimised for touch devices"/>
+      </a>
+      <h1 class="visually-hidden">Spectastiq</h1>
+      <h2 class="visually-hidden">Interactive spectrogram renderer and audio player optimised for touch devices</h2>
+    </div>
+  </div>
+  <div class="content">
+    <p><a href="/index.html#examples" class="back-link">View all examples</a></p>
+    <div class="section">
+      <h1>Regions of interest example plugin</h1>
+      <p>Spectastiq can be extended to allow tagging and highlighting regions of interest.</p>
+      <spectastiq-viewer src="/assets/audio-examples/mixed-nz-native-birds.flac" id="spectastiq"></spectastiq-viewer>
+      <pre>&lt;script src="/path/to/spectastiq.js"&gt;&lt;/script&gt;
+&lt;spectastiq-viewer
+  src="/path/to/audio/my-audio.mp3"
+  id="spectastiq"
+&gt;
+&lt;/spectastiq-viewer&gt;
+&lt;script type="module"&gt;
+  import roiExtensionExample from "../roi-extension-example.js";
+
+  const rois = [
+    {
+      minFreqHz: 690,
+      maxFreqHz: 3810,
+      start: 88.62,
+      end: 91.36,
+      label: "bellbird"
+    },
+    // ... more regions of interest
+  ];
+  window.addEventListener("load", () => {
+    const spectastiq = document.getElementById("spectastiq");
+    roiExtensionExample(spectastiq, rois);
+  });
+&lt;/script&gt;</pre>
+
+      <h3>Creating regions with custom UI</h3>
+      <p>This example adds basic buttons to allow creating and resizing regions.</p>
+      <spectastiq-viewer src="/assets/audio-examples/mixed-nz-native-birds.flac" id="spectastiq-create">
+        <div slot="player-controls">
+          <div class="custom-controls">
+            <button class="play-pause btn">Play/pause</button>
+            <button class="create-roi btn">Create ROI</button>
+            <button class="resize-roi btn">Resize</button>
+          </div>
+        </div>
+      </spectastiq-viewer>
+      <pre>&lt;script src="/path/to/spectastiq.js"&gt;&lt;/script&gt;
+&lt;spectastiq-viewer
+  src="/path/to/audio/my-audio.mp3"
+  id="spectastiq"
+&gt;
+  &lt;div slot="player-controls"&gt;
+    &lt;button class="play-pause">Play/pause&lt;/button&gt;
+    &lt;button class="create-roi">Create ROI&lt;/button&gt;
+    &lt;button class="resize-roi">Resize&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/spectastiq-viewer&gt;
+&lt;script type="module"&gt;
+  import roiExtensionExample from "../roi-extension-example.js";
+  const rois = [];
+  window.addEventListener("load", () => {
+    const spectastiq = document.getElementById("spectastiq");
+    roiExtensionExample(spectastiq, rois);
+  });
+&lt;/script&gt;</pre>
+    </div>
+    <p><a href="/index.html#examples" class="back-link">View all examples</a></p>
+  </div>
+  <div class="footer">
+    <p>Spectastiq was developed by <a href="https://hardiesoft.com" target="_blank" rel="nofollow">Jon Hardie</a>, with
+      the help of funding from
+      the <a href="https://brianmasontrust.org/" rel="nofollow" target="_blank">Brian Mason Scientific &amp; Technical
+        Trust</a> and <a href="https://www.cacophony.org.nz/" rel="nofollow" target="_blank">The Cacophony Project</a>.
+    </p>
+    <!-- Sponsor badge?  -->
+    <p class="github">
+      <a href="https://github.com/hardiesoft/spectastiq" rel="nofollow" target="_blank" class="github-link">
+        <img src="/assets/img/github-mark-white.svg" width="16" height="16" alt="GitHub logo">
+        <span>View on GitHub</span>
+      </a>
+    </p>
+  </div>
+</div>
+</body>
+</html>

@@ -5,11 +5,7 @@
   <title>Spectastiq | Interactive spectrogram renderer and audio player optimised for touch devices</title>
   <link rel="stylesheet" href="assets/css/style.css"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <!--
-    If the example is not served from a secure context that opts into `SharedArrayBuffer`,
-    this serves resources with those headers set.
-   -->
-  <script src="https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq@latest/spectastiq.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq@v0.10.0/spectastiq.min.js"></script>
 </head>
 <body>
 <div class="main">
@@ -33,9 +29,8 @@
           time-scale
         >
         </spectastiq-viewer>
-
       </div>
-      <p style="margin-top: 5px; font-size: small; text-align: right">A <a
+      <p class="description">A <a
         href="https://www.nzbirdsonline.org.nz/species/bellbird"
         target="_blank" rel="nofollow">New Zealand
         bellbird</a> <em>freaking out</em> (I believe this is the scientific term)</p>
@@ -43,23 +38,23 @@
         page where you'd like to use it, and then embed as many times as you like using the custom <code>&lt;spectastiq-viewer&gt;</code>
         HTML tag.</p>
       <p>To get started quickly, you can include spectastiq from a CDN.</p>
-      <pre>&lt;script src="https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq@latest/spectastiq.min.js"&gt;&lt;/script&gt;
+      <pre>&lt;script src="https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq@v0.10.0/spectastiq.min.js"&gt;&lt;/script&gt;
 &lt;spectastiq-viewer src="/path/to/audio/file.mp3"&gt;&lt;/spectastiq-viewer&gt;</pre>
       <p>That's it! Spectastiq will fit itself to the parent HTML element of the
         <code>&lt;spectastiq-viewer&gt;</code> tag.</p>
       <!-- TODO: Buttons here to switch src and have a bellbird being more mellow. -->
     </div>
-
-    <!--    <div class="section" id="examples">-->
-    <!--      <h1>Examples</h1>-->
-    <!--      <ul class="examples">-->
-    <!--        <li><a href="#"><span>Supported attributes</span></a></li>-->
-    <!--        <li><a href="#"><span>Switching audio files</span></a></li>-->
-    <!--        <li><a href="#"><span>Color palettes</span></a></li>-->
-    <!--        <li><a href="#"><span>Drawing regions of interest</span></a></li>-->
-    <!--        <li><a href="#"><span>Custom UI controls</span></a></li>-->
-    <!--      </ul>-->
-    <!--    </div>-->
+    <div class="section" id="examples">
+      <h1>Examples</h1>
+      <ul class="examples">
+        <li><a href="/examples/switching-audio-files.html"><span>Switching audio files</span></a></li>
+        <li><a href="/examples/color-palettes.html"><span>Color palettes</span></a></li>
+        <li><a href="/examples/regions-of-interest.html"><span>Drawing regions of interest</span></a></li>
+        <li><a href="/examples/custom-ui-controls.html"><span>Custom UI controls</span></a></li>
+        <li><a href="/examples/select-local-recording.html"><span>Use a local audio recording</span></a></li>
+        <li><a href="/examples/supported-attributes.html"><span>Supported attributes</span></a></li>
+      </ul>
+    </div>
 
     <div class="section">
       <h1>Roadmap / future enhancements</h1>

@@ -75,6 +75,7 @@ code {
   background: #e6b4ff22;
   border-radius: 0.2rem;
   padding: 0.2rem;
+  white-space: nowrap;
 }
 
 .section {
@@ -129,6 +130,11 @@ code {
   background: url(../img/arrow_back.svg) no-repeat;
   margin-right: 0.5rem;
   transition: margin 0.2s;
+}
+
+.description {
+  margin-top: 0.5rem;
+  font-size: 1.1rem;
 }
 
 .footer {
