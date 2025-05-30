@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Spectastiq | Examples – Regions of interest</title>
-  <link rel="stylesheet" href="/assets/css/style.css"/>
+  <link rel="stylesheet" href="/spectastiq/assets/css/style.css"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <script src="https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq@v0.10.0/spectastiq.min.js"></script>
   <style>
@@ -82,8 +82,8 @@
 <div class="main">
   <div class="header">
     <div class="logo">
-      <a href="/" title="Spectastiq homepage">
-        <img src="/assets/img/spectastiq_logo.svg"
+      <a href="/spectastiq" title="Spectastiq homepage">
+        <img src="/spectastiq/assets/img/spectastiq_logo.svg"
              alt="Spectastiq | Interactive spectrogram renderer and audio player optimised for touch devices"/>
       </a>
       <h1 class="visually-hidden">Spectastiq</h1>
@@ -91,11 +91,12 @@
     </div>
   </div>
   <div class="content">
-    <p><a href="/index.html#examples" class="back-link">View all examples</a></p>
+    <p><a href="/spectastiq/index.html#examples" class="back-link">View all examples</a></p>
     <div class="section">
       <h1>Regions of interest example plugin</h1>
       <p>Spectastiq can be extended to allow tagging and highlighting regions of interest.</p>
-      <spectastiq-viewer src="/assets/audio-examples/mixed-nz-native-birds.flac" id="spectastiq"></spectastiq-viewer>
+      <spectastiq-viewer src="/spectastiq/assets/audio-examples/mixed-nz-native-birds.flac"
+                         id="spectastiq"></spectastiq-viewer>
       <pre>&lt;script src="/path/to/spectastiq.js"&gt;&lt;/script&gt;
 &lt;spectastiq-viewer
   src="/path/to/audio/my-audio.mp3"
@@ -123,7 +124,7 @@
 
       <h3>Creating regions with custom UI</h3>
       <p>This example adds basic buttons to allow creating and resizing regions.</p>
-      <spectastiq-viewer src="/assets/audio-examples/mixed-nz-native-birds.flac" id="spectastiq-create">
+      <spectastiq-viewer src="/spectastiq/assets/audio-examples/mixed-nz-native-birds.flac" id="spectastiq-create">
         <div slot="player-controls">
           <div class="custom-controls">
             <button class="play-pause btn">Play/pause</button>
@@ -152,7 +153,7 @@
   });
 &lt;/script&gt;</pre>
     </div>
-    <p><a href="/index.html#examples" class="back-link">View all examples</a></p>
+    <p><a href="/spectastiq/index.html#examples" class="back-link">View all examples</a></p>
   </div>
   <div class="footer">
     <p>Spectastiq was developed by <a href="https://hardiesoft.com" target="_blank" rel="nofollow">Jon Hardie</a>, with
@@ -163,7 +164,7 @@
     <!-- Sponsor badge?  -->
     <p class="github">
       <a href="https://github.com/hardiesoft/spectastiq" rel="nofollow" target="_blank" class="github-link">
-        <img src="/assets/img/github-mark-white.svg" width="16" height="16" alt="GitHub logo">
+        <img src="/spectastiq/assets/img/github-mark-white.svg" width="16" height="16" alt="GitHub logo">
         <span>View on GitHub</span>
       </a>
     </p>

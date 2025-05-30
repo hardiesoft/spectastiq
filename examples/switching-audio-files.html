@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Spectastiq | Examples – Switching audio files</title>
-  <link rel="stylesheet" href="/assets/css/style.css"/>
+  <link rel="stylesheet" href="/spectastiq/assets/css/style.css"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <script src="https://cdn.jsdelivr.net/gh/hardiesoft/spectastiq@v0.10.0/spectastiq.min.js"></script>
   <style>
@@ -16,8 +16,8 @@
 <div class="main">
   <div class="header">
     <div class="logo">
-      <a href="/" title="Spectastiq homepage">
-        <img src="/assets/img/spectastiq_logo.svg"
+      <a href="/spectastiq" title="Spectastiq homepage">
+        <img src="/spectastiq/assets/img/spectastiq_logo.svg"
              alt="Spectastiq | Interactive spectrogram renderer and audio player optimised for touch devices"/>
       </a>
       <h1 class="visually-hidden">Spectastiq</h1>
@@ -25,19 +25,20 @@
     </div>
   </div>
   <div class="content">
-    <p><a href="/index.html#examples" class="back-link">View all examples</a></p>
+    <p><a href="/spectastiq/index.html#examples" class="back-link">View all examples</a></p>
     <div class="section">
       <h1>Switching audio source dynamically</h1>
       <p>The <code>src</code> attribute of the <code>&lt;spectastiq-viewer&gt;</code> tag is dynamic. You can change it
         after the
         page has loaded.</p>
-      <spectastiq-viewer src="/assets/audio-examples/bellbird-alarm-calls.flac" id="spectastiq"></spectastiq-viewer>
+      <spectastiq-viewer src="/spectastiq/assets/audio-examples/bellbird-alarm-calls.flac"
+                         id="spectastiq"></spectastiq-viewer>
       <button class="switch-audio btn">bellbird-alarm-calls.flac</button>
       <button class="switch-audio btn">mixed-nz-native-birds.flac</button>
       <script>
         document.querySelectorAll('.switch-audio').forEach((button) => {
           button.addEventListener('click', (e) => {
-            spectastiq.src = `/assets/audio-examples/${e.target.innerText}`;
+            spectastiq.src = `/spectastiq/assets/audio-examples/${e.target.innerText}`;
           });
         });
       </script>
@@ -54,7 +55,7 @@
   });
 &lt;/script&gt;</pre>
     </div>
-    <p><a href="/index.html#examples" class="back-link">View all examples</a></p>
+    <p><a href="/spectastiq/index.html#examples" class="back-link">View all examples</a></p>
   </div>
   <div class="footer">
     <p>Spectastiq was developed by <a href="https://hardiesoft.com" target="_blank" rel="nofollow">Jon Hardie</a>, with
@@ -65,7 +66,7 @@
     <!-- Sponsor badge?  -->
     <p class="github">
       <a href="https://github.com/hardiesoft/spectastiq" rel="nofollow" target="_blank" class="github-link">
-        <img src="/assets/img/github-mark-white.svg" width="16" height="16" alt="GitHub logo">
+        <img src="/spectastiq/assets/img/github-mark-white.svg" width="16" height="16" alt="GitHub logo">
         <span>View on GitHub</span>
       </a>
     </p>
