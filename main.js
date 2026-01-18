@@ -1733,6 +1733,11 @@ export default class Spectastiq extends HTMLElement {
       {
         const centerX = start + (end - start) * 0.5;
         if (audioState.audioContext.state !== "running") {
+          if (navigator.audioSession) {
+            // Try to work around issue where iOS won't play audio if phone is muted.
+            // (iOS 17+)
+            navigator.audioSession.type = 'playback';
+          }
           // If we start zooming to a region before the context is running, things break.
           await audioState.audioContext.resume();
         }
