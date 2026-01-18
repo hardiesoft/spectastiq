@@ -1,4 +1,4 @@
-# *Spectastiq* v0.10.0
+# *Spectastiq* v0.10.2
 An interactive spectrogram renderer and audio player, optimised for touch devices.
 
 ## Usage

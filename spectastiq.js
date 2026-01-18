@@ -3351,6 +3351,11 @@ void main() {
     }
 
     if (state.audioContext.state !== "running") {
+      if (navigator.audioSession) {
+        // Try to work around issue where iOS won't play audio if phone is muted.
+        // (iOS 17+)
+        navigator.audioSession.type = 'playback';
+      }
       await state.audioContext.resume();
     }
     if (startAtOffsetZeroOne !== undefined) {
