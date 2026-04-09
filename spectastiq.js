@@ -5528,6 +5528,7 @@ void main() {
           this.loadSrc(src);
         }
       }
+      this.inited = true;
     }
   }
   if (!customElements.get("spectastiq-viewer")) {

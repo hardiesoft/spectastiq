@@ -1934,6 +1934,7 @@ export default class Spectastiq extends HTMLElement {
         this.loadSrc(src);
       }
     }
+    this.inited = true;
   }
 }
 if (!customElements.get("spectastiq-viewer")) {
