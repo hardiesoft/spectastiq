@@ -282,10 +282,12 @@ const updatePlayhead = (
   }
   const playheadWidth = 1.5 * Math.min(1, devicePixelRatio / 2);
   const progress = state.audioProgressZeroOne;
-  playheadCanvasCtx.clearRect(0, 0, playheadCanvasCtx.canvas.width, playheadCanvasCtx.canvas.height);
+  if (sharedState.displayTimeline) {
+    playheadCanvasCtx.clearRect(0, 0, playheadCanvasCtx.canvas.width, playheadCanvasCtx.canvas.height);
+  }
   mainPlayheadCanvasCtx.clearRect(0, 0, mainPlayheadCanvasCtx.canvas.width, mainPlayheadCanvasCtx.canvas.height);
   if (!Number.isNaN(progress)) {
-    if (!rangeChange) {
+    if (!rangeChange && sharedState.displayTimeline) {
       // Redraw the minimap playhead on its canvas at the correct offset position.
       const width = playheadCanvasCtx.canvas.width;
       const height = playheadCanvasCtx.canvas.height;
@@ -310,15 +312,18 @@ const updatePlayhead = (
         const endZeroOne = timelineState.right;
         const height = ctx.canvas.height;
         const center = Math.min(audioProgressZeroOne * width, width - 1);
-        ctx.beginPath();
-        ctx.moveTo(center, height);
-        ctx.lineTo(center - fourPx, height - threePx);
-        ctx.lineTo(center - fourPx, height - tenPx);
-        ctx.lineTo(center + fourPx, height - tenPx);
-        ctx.lineTo(center + fourPx, height - threePx);
-        ctx.lineTo(center, height);
-        ctx.fill();
-        ctx.beginPath();
+        if (sharedState.displayTimeline) {
+          // Draw the global playhead scrub handle
+          ctx.beginPath();
+          ctx.moveTo(center, height);
+          ctx.lineTo(center - fourPx, height - threePx);
+          ctx.lineTo(center - fourPx, height - tenPx);
+          ctx.lineTo(center + fourPx, height - tenPx);
+          ctx.lineTo(center + fourPx, height - threePx);
+          ctx.lineTo(center, height);
+          ctx.fill();
+          ctx.beginPath();
+        }
         // TODO: Use timelineState.inGlobalPlaybackScrubberHandle and timelineState.inLocalPlaybackScrubberHandle
         //  to show down/hover states for scrubber handles.
         if (timelineState.isDarkTheme) {
@@ -393,7 +398,7 @@ const updatePlayhead = (
       );
       const range = timelineState.right - timelineState.left;
       let opacity = 1;
-      if (range >= 0.75) {
+      if (range >= 0.75 && sharedState.displayTimeline) {
         opacity = mapRange(range, 0.75, 1, 1, 0.1);
       }
       if (playheadInRange) {

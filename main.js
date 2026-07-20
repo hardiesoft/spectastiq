@@ -472,7 +472,7 @@ export default class Spectastiq extends HTMLElement {
   }
 
   inited = false;
-  sharedState = {interacting: false};
+  sharedState = { interacting: false, displayTimeline: false };
 
   static observedAttributes = [
     "src",
@@ -825,13 +825,17 @@ export default class Spectastiq extends HTMLElement {
                   const endZeroOne = timelineState.right;
                   const top = timelineState.top;
                   const bottom = timelineState.bottom;
-                  drawTimelineUI(
-                    startZeroOne,
-                    endZeroOne,
-                    timelineState.currentAction
-                  );
+                  if (this.sharedState.displayTimeline) {
+                    drawTimelineUI(
+                      startZeroOne,
+                      endZeroOne,
+                      timelineState.currentAction
+                    );
+                  }
                   renderToContext(ctx, startZeroOne, endZeroOne, top, bottom);
-                  renderToContext(mapCtx, 0, 1, 1, 0);
+                  if (this.sharedState.displayTimeline) {
+                    renderToContext(mapCtx, 0, 1, 1, 0);
+                  }
                   audioState.progressSampleTime = performance.now();
                   updatePlayhead();
                   if (this.actualSampleRate) {
@@ -1089,11 +1093,13 @@ export default class Spectastiq extends HTMLElement {
                     this.timelineElements.container.classList.remove("disabled");
                   }
 
-                  drawTimelineUI(
-                    startZeroOne,
-                    endZeroOne,
-                    timelineState.currentAction
-                  );
+                  if (this.sharedState.displayTimeline) {
+                    drawTimelineUI(
+                      startZeroOne,
+                      endZeroOne,
+                      timelineState.currentAction
+                    );
+                  }
                   if (!audioState.playing) {
                     audioState.progressSampleTime = performance.now();
                     updatePlayhead();
@@ -1275,9 +1281,10 @@ export default class Spectastiq extends HTMLElement {
     // TODO: Get height dynamically from attributes, and respond to changes in height.
     const lazyLoad = this.hasAttribute("lazy");
     const allowFullscreen = this.hasAttribute("allow-fullscreen");
+    this.sharedState.displayTimeline = !this.hasAttribute("no-timeline");
     const totalHeight = this.height || 360;
     this.timelineHeight = Math.min(60, Math.max(44, totalHeight - 200));
-    this.spectrogramHeight = totalHeight - this.timelineHeight;
+    this.spectrogramHeight = this.sharedState.displayTimeline ? totalHeight - this.timelineHeight : totalHeight;
 
     const src = this.getAttribute("src");
     const root = this.shadowRoot;
@@ -1298,6 +1305,10 @@ export default class Spectastiq extends HTMLElement {
     const userOverlayCanvas = root.getElementById("user-overlay-canvas");
     const playheadCanvas = root.getElementById("playhead-canvas");
     const timelineUICanvas = root.getElementById("timeline-ui-canvas");
+
+    if (!this.sharedState.displayTimeline) {
+      miniMapContainer.style.display = "none";
+    }
 
     this.formatTime = (time) => {
       let seconds = Math.floor(time);
@@ -1424,6 +1435,7 @@ export default class Spectastiq extends HTMLElement {
       // Init palette options.
     };
 
+    // FIXME: Maybe only do this if there are no user-supplied controls?
     setupDefaultControls();
 
     if (!(src && !this.inited)) {
@@ -1494,17 +1506,22 @@ export default class Spectastiq extends HTMLElement {
     overlayCanvas.addEventListener("interaction-begin", () => {
       controls.classList.add("disabled");
       this.sharedState.interacting = true;
-      const startZeroOne = timelineState.left;
-      const endZeroOne = timelineState.right;
+
       // TODO: Await requestAnimationFrame?
       // TODO: Set timeout in case we're interacting but not moving?
-      drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+      if (this.sharedState.displayTimeline) {
+        const startZeroOne = timelineState.left;
+        const endZeroOne = timelineState.right;
+        drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+      }
     });
     overlayCanvas.addEventListener("interaction-target-changed", () => {
       // Canvas-based hit areas changed, so redraw handles for hover states etc.
-      const startZeroOne = timelineState.left;
-      const endZeroOne = timelineState.right;
-      drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+      if (this.sharedState.displayTimeline) {
+        const startZeroOne = timelineState.left;
+        const endZeroOne = timelineState.right;
+        drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+      }
       updatePlayhead();
     });
     overlayCanvas.addEventListener("interaction-end", () => {
@@ -1688,7 +1705,9 @@ export default class Spectastiq extends HTMLElement {
     timelineState.startPlayheadDrag = startPlayheadDrag;
     timelineState.endPlayheadDrag = endPlayheadDrag;
     timelineState.dragLocalPlayhead = dragLocalPlayhead;
-    timelineState.dragGlobalPlayhead = dragGlobalPlayhead;
+    if (this.sharedState.displayTimeline) {
+      timelineState.dragGlobalPlayhead = dragGlobalPlayhead;
+    }
     this.audioPlayer = {
       audioState,
       updatePlayhead,
@@ -1835,29 +1854,30 @@ export default class Spectastiq extends HTMLElement {
         true
       );
 
-      resizeCanvas(
-        this.timelineElements.mapCanvas,
-        width,
-        this.timelineHeight,
-        forReal
-      );
-      resizeCanvas(
-        this.timelineElements.timelineUICanvas,
-        width,
-        this.timelineHeight,
-        true
-      );
-
+      if (this.sharedState.displayTimeline) {
+        resizeCanvas(
+          this.timelineElements.mapCanvas,
+          width,
+          this.timelineHeight,
+          forReal
+        );
+        resizeCanvas(
+          this.timelineElements.timelineUICanvas,
+          width,
+          this.timelineHeight,
+          true
+        );
+        resizeCanvas(
+          this.playerElements.playheadCanvas,
+          width,
+          this.timelineHeight,
+          true
+        );
+      }
       resizeCanvas(
         this.playerElements.mainPlayheadCanvas,
         width,
         this.spectrogramHeight,
-        true
-      );
-      resizeCanvas(
-        this.playerElements.playheadCanvas,
-        width,
-        this.timelineHeight,
         true
       );
       let didChangeWidth = false;
@@ -1876,9 +1896,11 @@ export default class Spectastiq extends HTMLElement {
       const wasTriggeredByResizeEvent = !!resizedWidth;
       if (wasTriggeredByResizeEvent && !!this.resizeInited) {
         {
-          const startZeroOne = timelineState.left;
-          const endZeroOne = timelineState.right;
-          drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+          if (this.sharedState.displayTimeline) {
+            const startZeroOne = timelineState.left;
+            const endZeroOne = timelineState.right;
+            drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+          }
           if (this.actualSampleRate) {
             this.drawFrequencyScale && clearOverlay();
             this.drawFrequencyScale &&

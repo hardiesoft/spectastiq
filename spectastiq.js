@@ -1435,7 +1435,7 @@ void main() {
               (pointers[0].x - state.scrubDragOffsetX) / canvasWidth;
             if (scrubLocal) {
               state.dragLocalPlayhead(progress);
-            } else if (scrubGlobal) {
+            } else if (scrubGlobal && sharedState.displayTimeline) {
               state.dragGlobalPlayhead(progress);
             }
           } else if (state.panStarted) {
@@ -1866,7 +1866,9 @@ void main() {
       overSeekTrack: false,
     };
 
-    state.drawTimelineUI = drawTimelineUI(timelineElements, state);
+    if (sharedState.displayTimeline) {
+      state.drawTimelineUI = drawTimelineUI(timelineElements, state);
+    }
 
     const hitTestTimeline = (xOffsetZeroOne) => {
       //console.log("hitTestTimeline", xOffsetZeroOne);
@@ -1936,99 +1938,16 @@ void main() {
       };
     };
 
-    timelineElements.timelineUICanvas.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      if (e.pointerType === "mouse" && e.button !== 0) {
-        // Only response to left mouse clicks
-        return;
-      }
-      const xOffsetZeroOne =
-        e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
-      const {
-        inResizeHandleLeft,
-        inResizeHandleRight,
-        inSeekTrack,
-        targetChanged,
-      } = hitTestTimeline(xOffsetZeroOne);
-
-      let redrawnUI = false;
-      if (inSeekTrack) {
-        // Clicking outside handle.
-        if (!state.currentAction) {
-          clickOutsideHandle(state, timelineElements, xOffsetZeroOne);
-          redrawnUI = true;
+    if (sharedState.displayTimeline) {
+      timelineElements.timelineUICanvas.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (e.pointerType === "mouse" && e.button !== 0) {
+          // Only response to left mouse clicks
+          return;
         }
-      } else {
-        if (inResizeHandleLeft) {
-          startHandleResize(
-            e,
-            timelineElements,
-            state,
-            xOffsetZeroOne,
-            "resize-left"
-          );
-        } else if (inResizeHandleRight) {
-          startHandleResize(
-            e,
-            timelineElements,
-            state,
-            xOffsetZeroOne,
-            "resize-right"
-          );
-        } else {
-          startHandleDrag(e, timelineElements, state, xOffsetZeroOne);
-        }
-        redrawnUI = true;
-      }
-      if (targetChanged && !redrawnUI) {
-        // Redraw UI for i.e. hover events
-        timelineElements.overlayCanvas.dispatchEvent(
-          new Event("interaction-target-changed")
-        );
-      }
-    });
-    timelineElements.timelineUICanvas.addEventListener("pointerup", (e) => {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      if (state.currentAction !== null) {
-        switch (state.currentAction) {
-          case "pan":
-            endHandleDrag(e, timelineElements, state);
-            break;
-          case "resize-left":
-          case "resize-right":
-            endHandleResize(e, timelineElements, state);
-            break;
-        }
-      }
-    });
-    timelineElements.timelineUICanvas.addEventListener("pointerleave", () => {
-      state.overSeekTrack = false;
-      state.overLeftHandle = false;
-      state.overRightHandle = false;
-      state.overPanHandle = false;
-      timelineElements.overlayCanvas.dispatchEvent(
-        new Event("interaction-target-changed")
-      );
-    });
-    timelineElements.timelineUICanvas.addEventListener("pointermove", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      const xOffsetZeroOne =
-        e.offsetX / (timelineElements.timelineUICanvas.width / devicePixelRatio);
-      if (state.currentAction !== null) {
-        switch (state.currentAction) {
-          case "pan":
-            dragHandle(e, timelineElements, state, xOffsetZeroOne);
-            break;
-          case "resize-left":
-          case "resize-right":
-            dragResize(e, timelineElements, state, xOffsetZeroOne);
-            break;
-        }
-      } else if (e.pressure === 0 && e.pointerType === "mouse") {
+        const xOffsetZeroOne =
+          e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
         const {
           inResizeHandleLeft,
           inResizeHandleRight,
@@ -2036,42 +1955,127 @@ void main() {
           targetChanged,
         } = hitTestTimeline(xOffsetZeroOne);
 
-        // Add classes to DOM for cursors?
-        if (inResizeHandleLeft || inResizeHandleRight) {
-          if (!timelineElements.timelineUICanvas.classList.contains("resize")) {
-            timelineElements.timelineUICanvas.classList.add("resize");
+        let redrawnUI = false;
+        if (inSeekTrack) {
+          // Clicking outside handle.
+          if (!state.currentAction) {
+            clickOutsideHandle(state, timelineElements, xOffsetZeroOne);
+            redrawnUI = true;
           }
-        } else if (!inSeekTrack) {
-          if (timelineElements.timelineUICanvas.classList.contains("resize")) {
-            timelineElements.timelineUICanvas.classList.remove("resize");
-          }
-          timelineElements.timelineUICanvas.classList.add("grab");
         } else {
-          if (
-            timelineElements.timelineUICanvas.classList.contains("grab") ||
-            timelineElements.timelineUICanvas.classList.contains("resize") ||
-            timelineElements.timelineUICanvas.classList.contains("grabbing")
-          ) {
-            timelineElements.timelineUICanvas.classList.remove(
-              "grab",
-              "resize",
-              "grabbing"
+          if (inResizeHandleLeft) {
+            startHandleResize(
+              e,
+              timelineElements,
+              state,
+              xOffsetZeroOne,
+              "resize-left"
             );
+          } else if (inResizeHandleRight) {
+            startHandleResize(
+              e,
+              timelineElements,
+              state,
+              xOffsetZeroOne,
+              "resize-right"
+            );
+          } else {
+            startHandleDrag(e, timelineElements, state, xOffsetZeroOne);
           }
+          redrawnUI = true;
         }
-        if (targetChanged) {
+        if (targetChanged && !redrawnUI) {
           // Redraw UI for i.e. hover events
           timelineElements.overlayCanvas.dispatchEvent(
             new Event("interaction-target-changed")
           );
         }
-      }
-    });
+      });
+      timelineElements.timelineUICanvas.addEventListener("pointerup", (e) => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (state.currentAction !== null) {
+          switch (state.currentAction) {
+            case "pan":
+              endHandleDrag(e, timelineElements, state);
+              break;
+            case "resize-left":
+            case "resize-right":
+              endHandleResize(e, timelineElements, state);
+              break;
+          }
+        }
+      });
+      timelineElements.timelineUICanvas.addEventListener("pointerleave", () => {
+        state.overSeekTrack = false;
+        state.overLeftHandle = false;
+        state.overRightHandle = false;
+        state.overPanHandle = false;
+        timelineElements.overlayCanvas.dispatchEvent(
+          new Event("interaction-target-changed")
+        );
+      });
+      timelineElements.timelineUICanvas.addEventListener("pointermove", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        const xOffsetZeroOne =
+          e.offsetX / (timelineElements.timelineUICanvas.width / devicePixelRatio);
+        if (state.currentAction !== null) {
+          switch (state.currentAction) {
+            case "pan":
+              dragHandle(e, timelineElements, state, xOffsetZeroOne);
+              break;
+            case "resize-left":
+            case "resize-right":
+              dragResize(e, timelineElements, state, xOffsetZeroOne);
+              break;
+          }
+        } else if (e.pressure === 0 && e.pointerType === "mouse") {
+          const {
+            inResizeHandleLeft,
+            inResizeHandleRight,
+            inSeekTrack,
+            targetChanged,
+          } = hitTestTimeline(xOffsetZeroOne);
+
+          // Add classes to DOM for cursors?
+          if (inResizeHandleLeft || inResizeHandleRight) {
+            if (!timelineElements.timelineUICanvas.classList.contains("resize")) {
+              timelineElements.timelineUICanvas.classList.add("resize");
+            }
+          } else if (!inSeekTrack) {
+            if (timelineElements.timelineUICanvas.classList.contains("resize")) {
+              timelineElements.timelineUICanvas.classList.remove("resize");
+            }
+            timelineElements.timelineUICanvas.classList.add("grab");
+          } else {
+            if (
+              timelineElements.timelineUICanvas.classList.contains("grab") ||
+              timelineElements.timelineUICanvas.classList.contains("resize") ||
+              timelineElements.timelineUICanvas.classList.contains("grabbing")
+            ) {
+              timelineElements.timelineUICanvas.classList.remove(
+                "grab",
+                "resize",
+                "grabbing"
+              );
+            }
+          }
+          if (targetChanged) {
+            // Redraw UI for i.e. hover events
+            timelineElements.overlayCanvas.dispatchEvent(
+              new Event("interaction-target-changed")
+            );
+          }
+        }
+      });
+    }
 
     const hitTestScrubHandles = (x, y) => {
       const numPointers = Object.keys(state.pointers).length;
-      const atBottom = y > timelineElements.canvas.height / devicePixelRatio - 44;
-      const atTop = y < 44;
+      const atBottom = sharedState.displayTimeline ? y > timelineElements.canvas.height / devicePixelRatio - 44 : false;
+      const atTop = sharedState.displayTimeline ? y < 44 : true;
       let inLocalPlaybackScrubberHandle = false;
       let inGlobalPlaybackScrubberHandle = false;
       if (numPointers < 2 && (atTop || atBottom)) {
@@ -2133,39 +2137,41 @@ void main() {
         }
       }
     });
-    timelineElements.overlayCanvas.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      const xOffset =
-        e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
-      const dY = e.deltaY;
-      let amount;
-      if (Math.floor(dY) === dY) {
-        // This is a mousewheel event (with integer values).
-        amount = -e.deltaY * 0.001;
-      } else {
-        // This is likely a trackpad pinch event (with real number values)
-        amount = -e.deltaY * 0.01;
-      }
-      updateZoom(xOffset, amount, state, sharedState, timelineElements);
-    });
-    timelineElements.timelineUICanvas.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      const xOffset =
-        e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
-      const dY = e.deltaY;
-      let amount;
-      if (Math.floor(dY) === dY) {
-        // This is a mousewheel event (with integer values).
-        amount = -e.deltaY * 0.001;
-      } else {
-        // This is likely a trackpad pinch event (with real number values)
-        amount = -e.deltaY * 0.01;
-      }
-      const inHandle = xOffset >= state.left && xOffset <= state.right;
-      if (inHandle) {
+    if (sharedState.displayTimeline) {
+      timelineElements.overlayCanvas.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const xOffset =
+          e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
+        const dY = e.deltaY;
+        let amount;
+        if (Math.floor(dY) === dY) {
+          // This is a mousewheel event (with integer values).
+          amount = -e.deltaY * 0.001;
+        } else {
+          // This is likely a trackpad pinch event (with real number values)
+          amount = -e.deltaY * 0.01;
+        }
         updateZoom(xOffset, amount, state, sharedState, timelineElements);
-      }
-    });
+      });
+      timelineElements.timelineUICanvas.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const xOffset =
+          e.offsetX / (timelineElements.canvas.width / devicePixelRatio);
+        const dY = e.deltaY;
+        let amount;
+        if (Math.floor(dY) === dY) {
+          // This is a mousewheel event (with integer values).
+          amount = -e.deltaY * 0.001;
+        } else {
+          // This is likely a trackpad pinch event (with real number values)
+          amount = -e.deltaY * 0.01;
+        }
+        const inHandle = xOffset >= state.left && xOffset <= state.right;
+        if (inHandle) {
+          updateZoom(xOffset, amount, state, sharedState, timelineElements);
+        }
+      });
+    }
     timelineElements.overlayCanvas.addEventListener("pointerdown", (e) => {
       if (
         e.pointerType === "touch" ||
@@ -3445,10 +3451,12 @@ void main() {
     }
     const playheadWidth = 1.5 * Math.min(1, devicePixelRatio / 2);
     const progress = state.audioProgressZeroOne;
-    playheadCanvasCtx.clearRect(0, 0, playheadCanvasCtx.canvas.width, playheadCanvasCtx.canvas.height);
+    if (sharedState.displayTimeline) {
+      playheadCanvasCtx.clearRect(0, 0, playheadCanvasCtx.canvas.width, playheadCanvasCtx.canvas.height);
+    }
     mainPlayheadCanvasCtx.clearRect(0, 0, mainPlayheadCanvasCtx.canvas.width, mainPlayheadCanvasCtx.canvas.height);
     if (!Number.isNaN(progress)) {
-      if (!rangeChange) {
+      if (!rangeChange && sharedState.displayTimeline) {
         // Redraw the minimap playhead on its canvas at the correct offset position.
         const width = playheadCanvasCtx.canvas.width;
         const height = playheadCanvasCtx.canvas.height;
@@ -3473,15 +3481,18 @@ void main() {
           const endZeroOne = timelineState.right;
           const height = ctx.canvas.height;
           const center = Math.min(audioProgressZeroOne * width, width - 1);
-          ctx.beginPath();
-          ctx.moveTo(center, height);
-          ctx.lineTo(center - fourPx, height - threePx);
-          ctx.lineTo(center - fourPx, height - tenPx);
-          ctx.lineTo(center + fourPx, height - tenPx);
-          ctx.lineTo(center + fourPx, height - threePx);
-          ctx.lineTo(center, height);
-          ctx.fill();
-          ctx.beginPath();
+          if (sharedState.displayTimeline) {
+            // Draw the global playhead scrub handle
+            ctx.beginPath();
+            ctx.moveTo(center, height);
+            ctx.lineTo(center - fourPx, height - threePx);
+            ctx.lineTo(center - fourPx, height - tenPx);
+            ctx.lineTo(center + fourPx, height - tenPx);
+            ctx.lineTo(center + fourPx, height - threePx);
+            ctx.lineTo(center, height);
+            ctx.fill();
+            ctx.beginPath();
+          }
           // TODO: Use timelineState.inGlobalPlaybackScrubberHandle and timelineState.inLocalPlaybackScrubberHandle
           //  to show down/hover states for scrubber handles.
           if (timelineState.isDarkTheme) {
@@ -3556,7 +3567,7 @@ void main() {
         );
         const range = timelineState.right - timelineState.left;
         let opacity = 1;
-        if (range >= 0.75) {
+        if (range >= 0.75 && sharedState.displayTimeline) {
           opacity = mapRange(range, 0.75, 1, 1, 0.1);
         }
         if (playheadInRange) {
@@ -4067,7 +4078,7 @@ void main() {
     }
 
     inited = false;
-    sharedState = {interacting: false};
+    sharedState = { interacting: false, displayTimeline: false };
 
     static observedAttributes = [
       "src",
@@ -4420,13 +4431,17 @@ void main() {
                     const endZeroOne = timelineState.right;
                     const top = timelineState.top;
                     const bottom = timelineState.bottom;
-                    drawTimelineUI(
-                      startZeroOne,
-                      endZeroOne,
-                      timelineState.currentAction
-                    );
+                    if (this.sharedState.displayTimeline) {
+                      drawTimelineUI(
+                        startZeroOne,
+                        endZeroOne,
+                        timelineState.currentAction
+                      );
+                    }
                     renderToContext(ctx, startZeroOne, endZeroOne, top, bottom);
-                    renderToContext(mapCtx, 0, 1, 1, 0);
+                    if (this.sharedState.displayTimeline) {
+                      renderToContext(mapCtx, 0, 1, 1, 0);
+                    }
                     audioState.progressSampleTime = performance.now();
                     updatePlayhead();
                     if (this.actualSampleRate) {
@@ -4684,11 +4699,13 @@ void main() {
                       this.timelineElements.container.classList.remove("disabled");
                     }
 
-                    drawTimelineUI(
-                      startZeroOne,
-                      endZeroOne,
-                      timelineState.currentAction
-                    );
+                    if (this.sharedState.displayTimeline) {
+                      drawTimelineUI(
+                        startZeroOne,
+                        endZeroOne,
+                        timelineState.currentAction
+                      );
+                    }
                     if (!audioState.playing) {
                       audioState.progressSampleTime = performance.now();
                       updatePlayhead();
@@ -4870,9 +4887,10 @@ void main() {
       // TODO: Get height dynamically from attributes, and respond to changes in height.
       const lazyLoad = this.hasAttribute("lazy");
       const allowFullscreen = this.hasAttribute("allow-fullscreen");
+      this.sharedState.displayTimeline = !this.hasAttribute("no-timeline");
       const totalHeight = this.height || 360;
       this.timelineHeight = Math.min(60, Math.max(44, totalHeight - 200));
-      this.spectrogramHeight = totalHeight - this.timelineHeight;
+      this.spectrogramHeight = this.sharedState.displayTimeline ? totalHeight - this.timelineHeight : totalHeight;
 
       const src = this.getAttribute("src");
       const root = this.shadowRoot;
@@ -4893,6 +4911,10 @@ void main() {
       const userOverlayCanvas = root.getElementById("user-overlay-canvas");
       const playheadCanvas = root.getElementById("playhead-canvas");
       const timelineUICanvas = root.getElementById("timeline-ui-canvas");
+
+      if (!this.sharedState.displayTimeline) {
+        miniMapContainer.style.display = "none";
+      }
 
       this.formatTime = (time) => {
         let seconds = Math.floor(time);
@@ -5019,6 +5041,7 @@ void main() {
         // Init palette options.
       };
 
+      // FIXME: Maybe only do this if there are no user-supplied controls?
       setupDefaultControls();
 
       if (!(src && !this.inited)) {
@@ -5089,17 +5112,22 @@ void main() {
       overlayCanvas.addEventListener("interaction-begin", () => {
         controls.classList.add("disabled");
         this.sharedState.interacting = true;
-        const startZeroOne = timelineState.left;
-        const endZeroOne = timelineState.right;
+
         // TODO: Await requestAnimationFrame?
         // TODO: Set timeout in case we're interacting but not moving?
-        drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+        if (this.sharedState.displayTimeline) {
+          const startZeroOne = timelineState.left;
+          const endZeroOne = timelineState.right;
+          drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+        }
       });
       overlayCanvas.addEventListener("interaction-target-changed", () => {
         // Canvas-based hit areas changed, so redraw handles for hover states etc.
-        const startZeroOne = timelineState.left;
-        const endZeroOne = timelineState.right;
-        drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+        if (this.sharedState.displayTimeline) {
+          const startZeroOne = timelineState.left;
+          const endZeroOne = timelineState.right;
+          drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+        }
         updatePlayhead();
       });
       overlayCanvas.addEventListener("interaction-end", () => {
@@ -5283,7 +5311,9 @@ void main() {
       timelineState.startPlayheadDrag = startPlayheadDrag;
       timelineState.endPlayheadDrag = endPlayheadDrag;
       timelineState.dragLocalPlayhead = dragLocalPlayhead;
-      timelineState.dragGlobalPlayhead = dragGlobalPlayhead;
+      if (this.sharedState.displayTimeline) {
+        timelineState.dragGlobalPlayhead = dragGlobalPlayhead;
+      }
       this.audioPlayer = {
         audioState,
         updatePlayhead,
@@ -5430,29 +5460,30 @@ void main() {
           true
         );
 
-        resizeCanvas(
-          this.timelineElements.mapCanvas,
-          width,
-          this.timelineHeight,
-          forReal
-        );
-        resizeCanvas(
-          this.timelineElements.timelineUICanvas,
-          width,
-          this.timelineHeight,
-          true
-        );
-
+        if (this.sharedState.displayTimeline) {
+          resizeCanvas(
+            this.timelineElements.mapCanvas,
+            width,
+            this.timelineHeight,
+            forReal
+          );
+          resizeCanvas(
+            this.timelineElements.timelineUICanvas,
+            width,
+            this.timelineHeight,
+            true
+          );
+          resizeCanvas(
+            this.playerElements.playheadCanvas,
+            width,
+            this.timelineHeight,
+            true
+          );
+        }
         resizeCanvas(
           this.playerElements.mainPlayheadCanvas,
           width,
           this.spectrogramHeight,
-          true
-        );
-        resizeCanvas(
-          this.playerElements.playheadCanvas,
-          width,
-          this.timelineHeight,
           true
         );
         let didChangeWidth = false;
@@ -5470,9 +5501,11 @@ void main() {
         const wasTriggeredByResizeEvent = !!resizedWidth;
         if (wasTriggeredByResizeEvent && !!this.resizeInited) {
           {
-            const startZeroOne = timelineState.left;
-            const endZeroOne = timelineState.right;
-            drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+            if (this.sharedState.displayTimeline) {
+              const startZeroOne = timelineState.left;
+              const endZeroOne = timelineState.right;
+              drawTimelineUI(startZeroOne, endZeroOne, timelineState.currentAction);
+            }
             if (this.actualSampleRate) {
               this.drawFrequencyScale && clearOverlay();
               this.drawFrequencyScale &&
