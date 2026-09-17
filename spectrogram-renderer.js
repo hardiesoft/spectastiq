@@ -108,6 +108,7 @@ export const initSpectrogram = async (fileBytes, previousState) => {
     sampleRate: 48000,
   });
   // TODO: Decode audio off main thread
+  console.log("file", fileBytes.byteLength);
   const wavData = await audioContext.decodeAudioData(fileBytes).catch((e) => {
     console.error(e);
   });

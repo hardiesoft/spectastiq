@@ -3,7 +3,6 @@ import {colorMaps, initSpectrogram} from "./spectrogram-renderer.js";
 import {initAudio, initAudioPlayer} from "./audio-player.js";
 import {mapRange} from "./webgl-drawimage.js";
 import {COLOR_MAPS} from "./colormaps.js";
-
 const template = document.createElement("template");
 template.innerHTML = `
 <style>
@@ -711,6 +710,13 @@ export default class Spectastiq extends HTMLElement {
               this.inited = true;
             }
             const reader = downloadAudioResponse.body.getReader();
+            if (downloadAudioResponse.headers.get("Content-Type") === 'text/html') {
+              this.showErrorMessage(`Invalid file for <pre>${this.localSrc || src}</pre>`);
+              return;
+            }
+            console.log(downloadAudioResponse.headers.get("Content-Type"));
+            // TODO: If text/html, return error
+
             let expectedLength = parseInt(
               downloadAudioResponse.headers.get("Content-Length"),
               10
@@ -1227,7 +1233,6 @@ export default class Spectastiq extends HTMLElement {
                 });
               };
               initAudio(
-                this.playerElements,
                 audioFloatData,
                 audioState
               );

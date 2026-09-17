@@ -1,24 +1,36 @@
 import {mapRange} from "./webgl-drawimage.js";
 
-export const initAudioPlayer = (
-  root,
-  sharedState,
-  timelineState,
-  playerElements,
-) => {
+const initAudioContext = (state) => {
   const audioContext = new AudioContext({sampleRate: 48000});
   const gainNode = audioContext.createGain();
   const filterNode = audioContext.createBiquadFilter();
   filterNode.type = "allpass";
   const volume = 1.0;
   setGain(gainNode, volume);
+  state.audioNodes = {
+    filterNode,
+    gainNode
+  };
+  state.audioContext = audioContext;
 
+  if (state.audioFloatData) {
+    state.audioDuration = state.audioFloatData.length / 48000;
+    const buffer = state.audioContext.createBuffer(1, state.audioFloatData.length, 48000);
+    buffer.copyToChannel(state.audioFloatData, 0);
+    state.audioBuffer = buffer;
+    state.audioFloatData = null;
+  }
+};
+
+export const initAudioPlayer = (
+  root,
+  sharedState,
+  timelineState,
+  playerElements,
+) => {
   const state = {
-    audioNodes: {
-      gainNode,
-      filterNode,
-    },
-    audioContext,
+    audioNodes: null,
+    audioContext: null,
     audioProgressZeroOne: 0,
     playbackStartOffset: 0,
     progressSampleTime: 0,
@@ -55,9 +67,9 @@ export const initAudioPlayer = (
     setPlaybackOffset: (offsetZeroOne) =>
       setPlaybackTime(offsetZeroOne, state, playerElements),
     setBandPass: (minFreq, maxFreq) =>
-      setBandPass(filterNode, minFreq, maxFreq),
-    removeBandPass: () => removeBandPass(filterNode),
-    setGain: (volume) => setGain(gainNode, volume),
+      setBandPass(state.audioNodes.filterNode, minFreq, maxFreq),
+    removeBandPass: () => removeBandPass(state.audioNodes && state.audioNodes.filterNode),
+    setGain: (volume) => setGain(state.audioNodes.gainNode, volume),
     pause: () => pauseAudio(state, timelineState, sharedState, playerElements),
     play: (startOffsetZeroOne, stopOffsetZeroOne) => playAudio(state, timelineState, sharedState, playerElements, startOffsetZeroOne, stopOffsetZeroOne),
     togglePlayback: () => togglePlayback(state, timelineState, sharedState, playerElements),
@@ -69,8 +81,10 @@ export const initAudioPlayer = (
 };
 
 const removeBandPass = (biQuadFilterNode) => {
-  // Does this really turn things off properly?
-  biQuadFilterNode.type = "allpass";
+  if (biQuadFilterNode) {
+    // Does this really turn things off properly?
+    biQuadFilterNode.type = "allpass";
+  }
 };
 
 const setBandPass = (biQuadFilterNode, minFreq, maxFreq) => {
@@ -171,11 +185,8 @@ const setPlaybackTime = async (offsetZeroOne, state) => {
   }
 };
 
-export const initAudio = (playerElements, audioFloatData, state) => {
-  state.audioDuration = audioFloatData.length / 48000;
-  const buffer = state.audioContext.createBuffer(1, audioFloatData.length, 48000);
-  buffer.copyToChannel(audioFloatData, 0);
-  state.audioBuffer = buffer;
+export const initAudio = (audioFloatData, state) => {
+  state.audioFloatData = audioFloatData;
 };
 
 const playAudio = async (state, timelineState, sharedState, playerElements, startAtOffsetZeroOne, stopAtOffsetZeroOne) => {
@@ -186,7 +197,9 @@ const playAudio = async (state, timelineState, sharedState, playerElements, star
   if (state.playing) {
     pauseAudio(state, timelineState, sharedState, playerElements);
   }
-
+  if (!state.audioContext) {
+    initAudioContext(state);
+  }
   if (state.audioContext.state !== "running") {
     if (navigator.audioSession) {
       // Try to work around issue where iOS won't play audio if phone is muted.
@@ -433,6 +446,9 @@ const updatePlayhead = (
 };
 
 const togglePlayback = async (state, timelineState, sharedState, playerElements) => {
+  if (!state.audioContext) {
+    initAudioContext(state);
+  }
   if (!state.playing) {
     await playAudio(state, timelineState, sharedState, playerElements);
   } else {
