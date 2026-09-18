@@ -1,6 +1,6 @@
 import {initTimeline} from "./timeline-wrapper.js";
-import {colorMaps, initSpectrogram} from "./spectrogram-renderer.js";
-import {initAudio, initAudioPlayer} from "./audio-player.js";
+import {acquireWorkerPool, colorMaps, initSpectrogram} from "./spectrogram-renderer.js";
+import { initAudio, initAudioContext, initAudioPlayer } from './audio-player.js'
 import {mapRange} from "./webgl-drawimage.js";
 import {COLOR_MAPS} from "./colormaps.js";
 const template = document.createElement("template");
@@ -392,16 +392,16 @@ template.innerHTML = `
 <div id="container">
   <div id="spectrogram-container">
     <div id="canvas-container">
-      <canvas height="300" id="spectrogram-canvas"></canvas>
-      <canvas height="300" id="user-overlay-canvas"></canvas>
-      <canvas height="30" id="spectastiq-timescale-overlay-canvas"></canvas>        
-      <canvas height="300" id="spectastiq-overlay-canvas"></canvas>
-      <canvas height="300" id="main-playhead-canvas"></canvas>                
+      <canvas height="300" id="spectrogram-canvas" role="img" aria-label="spectrogram canvas"></canvas>
+      <canvas height="300" id="user-overlay-canvas" role="img" aria-label="user defined overlay elements"></canvas>
+      <canvas height="30" id="spectastiq-timescale-overlay-canvas" role="img" aria-label="timescale overlay ui"></canvas>        
+      <canvas height="300" id="spectastiq-overlay-canvas" role="img" aria-label="overlay canvas"></canvas>
+      <canvas height="300" id="main-playhead-canvas" role="img" aria-label="local playhead"></canvas>                
     </div>
     <div id="mini-map">
-      <canvas height="60" id="map-canvas"></canvas>     
-      <canvas height="60" id="playhead-canvas"></canvas>
-      <canvas height="60" id="timeline-ui-canvas"></canvas>         
+      <canvas height="60" id="map-canvas" role="img" aria-label="spectrogram overview"></canvas>     
+      <canvas height="60" id="playhead-canvas" role="img" aria-label="global playhead"></canvas>
+      <canvas height="60" id="timeline-ui-canvas" role="img" aria-label="timeline selection ui"></canvas>         
     </div>
     <progress id="progress-bar" max="100"></progress>
     <div class="lds-ring" id="loading-spinner">
@@ -549,14 +549,73 @@ export default class Spectastiq extends HTMLElement {
   }
 
   connectedCallback() {
-    this.init();
+    if (!this.releaseWorkerPool) {
+      this.releaseWorkerPool = acquireWorkerPool();
+    }
+    let delay = 0;
+    if (this.getAttribute("load-delay")) {
+      delay = Number(this.getAttribute("load-delay"));
+      if (isNaN(delay)) {
+        delay = 0;
+      }
+    }
+    if (delay) {
+      this.startupDelay = setTimeout(this.init.bind(this), delay);
+    } else {
+      this.init();
+    }
   }
 
   disconnectedCallback() {
-    this.terminateWorkers && this.terminateWorkers();
-    this.terminateWorkers = null;
-    this.pause()
+    this.disconnected = true;
+    if (this.startupDelay) {
+      clearTimeout(this.startupDelay);
+      delete this.startupDelay;
+    }
+    this.releaseWorkerPool?.();
+    this.releaseWorkerPool = undefined;
+    if (this.raf) {
+      cancelAnimationFrame(this.raf);
+      delete this.raf;
+    }
+    if (this.glContexts) {
+      for (const ctx of this.glContexts) {
+        const loseContextExt = ctx.getExtension('WEBGL_lose_context');
+        if (loseContextExt) {
+          loseContextExt.loseContext();
+        }
+      }
+      delete this.glContexts;
+    }
+    if (this.paletteChangeTimeout) {
+      clearTimeout(this.paletteChangeTimeout);
+      delete this.paletteChangeTimeout;
+    }
+    if (this.sharedState.interactionTimeout) {
+      clearTimeout(this.sharedState.interactionTimeout);
+      delete this.sharedState.interactionTimeout;
+    }
+    this.sharedState = { interacting: false, displayTimeline: false };
+
+    if (this.reader) {
+      this.reader.cancel().then(() => {
+        console.warn("reader cancelled");
+      });
+    }
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      delete this.resizeObserver;
+    }
+    if (this.intersectionObserver) {
+      this.intersectionObserver.disconnect();
+      delete this.intersectionObserver;
+    }
+
+    this.pause?.()
     this.unload();
+    for (const child of this.shadowRoot.children) {
+      this.shadowRoot.removeChild(child);
+    }
   }
 
   get src() {
@@ -648,8 +707,14 @@ export default class Spectastiq extends HTMLElement {
     const {drawTimelineUI, timelineState, setInitialZoom} = this.timeline;
     const {audioState, updatePlayhead} = this.audioPlayer;
     const canvas = this.timelineElements.canvas;
-    const mapCtx = this.timelineElements.mapCanvas.getContext("webgl2");
+    let mapCtx;
+    this.glContexts = [];
+    if (this.sharedState.displayTimeline) {
+      mapCtx = this.timelineElements.mapCanvas.getContext("webgl2");
+      this.glContexts.push(mapCtx);
+    }
     const ctx = canvas.getContext("webgl2");
+    this.glContexts.push(ctx);
     const timescaleOverlayContext =
       this.timelineElements.timescaleCanvas.getContext("2d");
     const userOverlayCtx =
@@ -679,7 +744,8 @@ export default class Spectastiq extends HTMLElement {
           this.abortController.abort("User aborted");
         }
         this.abortController = new AbortController();
-        this.abortController.signal.addEventListener("onabort", () => {
+        this.abortController.signal.addEventListener("abort", () => {
+          console.warn("Request aborted");
           this.requestAborted = true;
         });
         const requestInfo = {
@@ -691,9 +757,15 @@ export default class Spectastiq extends HTMLElement {
             ...headers,
           },
         };
+        if (this.reader) {
+          //await this.reader.cancel();
+        }
         let downloadAudioResponse;
         try {
           downloadAudioResponse = await fetch(src, requestInfo);
+          if (this.disconnected) {
+            return;
+          }
           if (!downloadAudioResponse.ok) {
             this.showErrorMessage(`Audio file not found <pre>${src}</pre>`);
           } else {
@@ -709,13 +781,11 @@ export default class Spectastiq extends HTMLElement {
               );
               this.inited = true;
             }
-            const reader = downloadAudioResponse.body.getReader();
+            this.reader = downloadAudioResponse.body.getReader();
             if (downloadAudioResponse.headers.get("Content-Type") === 'text/html') {
               this.showErrorMessage(`Invalid file for <pre>${this.localSrc || src}</pre>`);
               return;
             }
-            console.log(downloadAudioResponse.headers.get("Content-Type"));
-            // TODO: If text/html, return error
 
             let expectedLength = parseInt(
               downloadAudioResponse.headers.get("Content-Length"),
@@ -735,7 +805,9 @@ export default class Spectastiq extends HTMLElement {
               }
             }
             while (!this.requestAborted) {
-              const {done, value} = await reader.read();
+              const {done, value} = await this.reader.read().catch(e => {
+                console.warn("Read failed", e);
+              });
               if (done) {
                 break;
               }
@@ -750,17 +822,25 @@ export default class Spectastiq extends HTMLElement {
                   }
                 }
               }
+              if (this.requestAborted) {
+                // console.log("Break;");
+              }
             }
-            const fileBytesReceived = new Uint8Array(receivedLength);
+            delete this.reader;
+            let fileBytesReceived = new Uint8Array(receivedLength);
             let position = 0;
             for (const chunk of chunks) {
               fileBytesReceived.set(chunk, position);
               position += chunk.length;
             }
             fileBytes = fileBytesReceived.buffer;
+            if (this.disconnected) {
+              return;
+            }
             const spectrogramInited = await initSpectrogram(
               fileBytes,
-              this.persistentSpectrogramState || null
+              this.persistentSpectrogramState || null,
+              this.sharedState.displayTimeline
             );
             if (spectrogramInited.error) {
               this.showErrorMessage(`${spectrogramInited.error} for <pre>${this.localSrc || src}</pre>`);
@@ -770,7 +850,6 @@ export default class Spectastiq extends HTMLElement {
                 renderToContext,
                 audioFloatData,
                 invalidateCanvasCaches,
-                terminateWorkers,
                 cyclePalette,
                 getGainForRegion,
                 persistentSpectrogramState,
@@ -800,7 +879,6 @@ export default class Spectastiq extends HTMLElement {
               audioState.playheadWasInRangeWhenPlaybackStarted = false;
 
               this.persistentSpectrogramState = persistentSpectrogramState;
-              this.terminateWorkers = terminateWorkers;
               this.invalidateCanvasCaches = invalidateCanvasCaches;
               this.renderRange = renderRange;
 
@@ -819,13 +897,17 @@ export default class Spectastiq extends HTMLElement {
                 );
                 palette = defaultPalette;
               }
-              let paletteChangeTimeout;
               this.nextPalette = () => {
                 this.clearOverlay();
                 const nextPalette = cyclePalette();
                 // Give downstream renderers a moment to adjust to palette changes;
-                clearTimeout(paletteChangeTimeout);
-                paletteChangeTimeout = setTimeout(() => {
+                if (this.paletteChangeTimeout) {
+                  clearTimeout(this.paletteChangeTimeout);
+                }
+                this.paletteChangeTimeout = setTimeout(() => {
+                  if (this.disconnected) {
+                    return;
+                  }
                   timelineState.isDarkTheme = nextPalette !== "Grey";
                   const startZeroOne = timelineState.left;
                   const endZeroOne = timelineState.right;
@@ -1078,6 +1160,9 @@ export default class Spectastiq extends HTMLElement {
                   this.raf = undefined;
                 }
                 this.raf = requestAnimationFrame(() => {
+                  if (this.disconnected) {
+                    return;
+                  }
                   const startZeroOne = timelineState.left;
                   const endZeroOne = timelineState.right;
                   const top = timelineState.top;
@@ -1126,6 +1211,9 @@ export default class Spectastiq extends HTMLElement {
                   // Render the stretched version
                   renderToContext(ctx, startZeroOne, endZeroOne, top, bottom).then(
                     (s) => {
+                      if (this.disconnected) {
+                        return;
+                      }
                       if (!!s) {
                         this.shadowRoot.dispatchEvent(
                           new CustomEvent("render", {
@@ -1146,19 +1234,34 @@ export default class Spectastiq extends HTMLElement {
                       }
                     }
                   );
-                  if (initialRender) {
+                  if (initialRender && this.sharedState.displayTimeline) {
                     renderToContext(mapCtx, 0, 1, 1, 0);
                   }
                   if (!this.sharedState.interacting || initialRender) {
                     // Render the fine detail of the zoom level and then fill it in when available.
                     renderRange(startZeroOne, endZeroOne, canvas.width, force).then(
                       (rangeCropInfo) => {
+                        if (this.disconnected) {
+                          return;
+                        }
                         if (rangeCropInfo && rangeCropInfo.cropAmountTop) {
                           cropAmountTop = rangeCropInfo.cropAmountTop;
                           this.actualSampleRate = rangeCropInfo.actualSampleRate;
                         }
-                        if (initialRender) {
-                          renderToContext(mapCtx, 0, 1, 1, 0).then(() => {
+                        if (initialRender && this.sharedState.displayTimeline) {
+                          renderToContext(mapCtx, 0, 1, 1, 0);
+                        }
+                        renderToContext(
+                          ctx,
+                          timelineState.left,
+                          timelineState.right,
+                          top,
+                          bottom
+                        ).then((s) => {
+                          if (this.disconnected) {
+                            return;
+                          }
+                          if (initialRender) {
                             if (
                               this.loadingSpinner &&
                               this.loadingSpinner.parentElement
@@ -1182,15 +1285,8 @@ export default class Spectastiq extends HTMLElement {
                               );
                               this.endLoad();
                             }
-                          });
-                        }
-                        renderToContext(
-                          ctx,
-                          timelineState.left,
-                          timelineState.right,
-                          top,
-                          bottom
-                        ).then((s) => {
+                          }
+
                           if (
                             initialRender &&
                             startTimeOffset !== 0 &&
@@ -1226,6 +1322,8 @@ export default class Spectastiq extends HTMLElement {
                               })
                             );
                           }
+                        }).catch((e) => {
+                          console.log("Render failed?", this.src);
                         });
                       }
                     );
@@ -1414,6 +1512,8 @@ export default class Spectastiq extends HTMLElement {
         label.setAttribute("for", button.id);
         label.classList.add("radio-custom-label");
         const icon = document.createElement("canvas");
+        icon.setAttribute("role", "img");
+        icon.setAttribute("aria-label", "palette icon");
         icon.width = 16 * devicePixelRatio;
         icon.height = 16 * devicePixelRatio;
         label.appendChild(icon);
@@ -1756,6 +1856,9 @@ export default class Spectastiq extends HTMLElement {
     this.selectRegionOfInterest = async (start, end, min, max) => {
       {
         const centerX = start + (end - start) * 0.5;
+        if (!audioState.audioContext) {
+          initAudioContext(audioState);
+        }
         if (audioState.audioContext.state !== "running") {
           if (navigator.audioSession) {
             // Try to work around issue where iOS won't play audio if phone is muted.
@@ -1920,6 +2023,9 @@ export default class Spectastiq extends HTMLElement {
         clearTimeout(this.sharedState.interactionTimeout);
         this.timelineElements.container.classList.add("disabled");
         this.sharedState.interactionTimeout = setTimeout(() => {
+          if (this.disconnected) {
+            return;
+          }
           // TODO: We only want to invalidate the caches if the *backing* size of the spectrogram has changed,
           //  and it needed to be re-rendered.  Otherwise just draw what we have again with no delay.
           //  Worth noting though that our webgl canvases *do* need to be resized at some point, and at that point
@@ -1928,6 +2034,9 @@ export default class Spectastiq extends HTMLElement {
             this.invalidateCanvasCaches && this.invalidateCanvasCaches();
             this.renderRange &&
             this.renderRange(0, 1, canvas.width, true).then(() => {
+              if (this.disconnected) {
+                return;
+              }
               this.render({detail: {initialRender: true, force: true}});
             });
           } else {
@@ -1937,23 +2046,23 @@ export default class Spectastiq extends HTMLElement {
         }, 300);
       }
     };
-    const resizeObserver = new ResizeObserver((entries) => {
+    this.resizeObserver = new ResizeObserver((entries) => {
       // We'll defer resizing the spectrogram backing canvas until a new spectrogram has been created at the new
       // width and is ready to render.
       this.resizeCanvases(entries[0].contentRect.width, false);
     });
-    resizeObserver.observe(container);
+    this.resizeObserver.observe(container);
     if (lazyLoad) {
-      const intersectionObserver = new IntersectionObserver((intersection) => {
+      this.intersectionObserver = new IntersectionObserver((intersection) => {
         if (intersection[0].isIntersecting && src && src !== "null" && src !== "undefined") {
           this.loadSrc(src);
-          intersectionObserver.disconnect();
+          this.intersectionObserver.disconnect();
         }
       }, {
         rootMargin: '50px',
         threshold: 0.1
       });
-      intersectionObserver.observe(container);
+      this.intersectionObserver.observe(container);
     } else {
       // Initial attributeChangedCallback happens before connectedCallback, so need to load src after initial one-time setup.
       if (src && src !== "null" && src !== "undefined") {

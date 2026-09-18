@@ -1,6 +1,6 @@
 import {mapRange} from "./webgl-drawimage.js";
 
-const initAudioContext = (state) => {
+export const initAudioContext = (state) => {
   const audioContext = new AudioContext({sampleRate: 48000});
   const gainNode = audioContext.createGain();
   const filterNode = audioContext.createBiquadFilter();
@@ -160,6 +160,9 @@ const dragLocalPlayhead = (
     )
   );
   cancelAnimationFrame(state.dragPlayheadRaf);
+  if (!state.audioContext) {
+    initAudioContext(state);
+  }
   if (state.audioContext.state !== "running") {
     // Update the playhead anyway.
     state.audioProgressZeroOne = thisOffsetXZeroOne;
@@ -176,6 +179,9 @@ const dragLocalPlayhead = (
 
 const setPlaybackTime = async (offsetZeroOne, state) => {
   if (state.audioDuration) {
+    if (!state.audioContext) {
+      initAudioContext(state);
+    }
     if (state.audioContext.state !== "running") {
       await state.audioContext.resume();
     }
@@ -275,6 +281,9 @@ const updatePlayhead = (
   beganPlaying = false,
   rangeChange = false,
 ) => {
+  if (!state.audioContext) {
+    return;
+  }
   const {
     playheadCanvasCtx,
     mainPlayheadCanvasCtx,

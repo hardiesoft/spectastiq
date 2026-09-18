@@ -2,25 +2,152 @@ import {init, mapRange} from "./webgl-drawimage.js";
 
 const FFT_WIDTH = 2048;
 const HEIGHT = FFT_WIDTH / 2; // Height needs to be at half the FFT width.
-const numWorkers = (navigator.hardwareConcurrency || 2) - 1;
+const numWorkers = Math.max(1, (navigator.hardwareConcurrency || 2) - 1);
 
-async function initWorkers(state) {
-  if (state.workers.length === 0) {
+class WorkerPool {
+  constructor(size) {
+    this.size = size;
+    this.workers = [];
+    this.queue = [];
+    this.idleWorkers = [];
+    this.initPromise = undefined;
+    this.referenceCount = 0;
+  }
+
+  acquire() {
+    this.referenceCount++;
+    this.init();
+
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+
+      released = true;
+      this.release();
+    };
+  }
+
+  release() {
+    if (this.referenceCount === 0) {
+      console.warn("Spectastiq worker pool released without a matching acquire");
+      return;
+    }
+
+    this.referenceCount--;
+
+    if (this.referenceCount === 0) {
+      const initialization = this.initPromise || Promise.resolve();
+
+      initialization
+        .catch(() => {
+          // Initialization cleanup is handled by init().
+        })
+        .finally(() => {
+          // Another component may have acquired the pool while we waited.
+          if (this.referenceCount === 0) {
+            this.terminate();
+          }
+        });
+    }
+  }
+
+  init() {
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+
+    this.initPromise = this.initialize().catch((error) => {
+      this.terminate();
+      this.initPromise = undefined;
+      throw error;
+    });
+
+    return this.initPromise;
+  }
+
+  async initialize() {
     const remoteScriptOrigin = cdnScriptOrigin();
-    const wasmUrl = remoteScriptOrigin ? `${remoteScriptOrigin}/pkg/spectastiq_bg.wasm` : new URL("./pkg/spectastiq_bg.wasm", import.meta.url);
-    const wasmLoader = fetch(wasmUrl);
-    const initWorkers = [];
-    for (let i = 0; i < numWorkers; i++) {
-      const worker = new WorkerPromise(`fft-worker-${i}`, state);
-      state.workers.push(worker);
+    const wasmUrl = remoteScriptOrigin
+      ? `${remoteScriptOrigin}/pkg/spectastiq_bg.wasm`
+      : new URL("./pkg/spectastiq_bg.wasm", import.meta.url);
+    const wasm = await (await fetch(wasmUrl)).arrayBuffer();
+
+    this.workers = Array.from(
+      {length: this.size},
+      (_, index) => new WorkerPromise(`fft-worker-${index}`)
+    );
+    await Promise.all(this.workers.map((worker) => worker.init(wasm)));
+    this.idleWorkers.push(...this.workers);
+    this.pump();
+  }
+
+  async runJob(job, output) {
+    await this.init();
+
+    return new Promise((resolve, reject) => {
+      this.queue.push({job, output, resolve, reject});
+      this.pump();
+    });
+  }
+
+  pump() {
+    while (this.idleWorkers.length > 0 && this.queue.length > 0) {
+      const worker = this.idleWorkers.pop();
+      const task = this.queue.shift();
+
+      worker
+        .doWork(task.job, task.output)
+        .then(task.resolve, task.reject)
+        .finally(() => {
+          // The pool may have been terminated while this task was running.
+          if (this.workers.includes(worker)) {
+            this.idleWorkers.push(worker);
+            this.pump();
+          }
+        });
     }
-    const wasm = await (await wasmLoader).arrayBuffer();
-    for (const worker of state.workers) {
-      initWorkers.push(worker.init(wasm));
+  }
+
+  terminate() {
+    const error = new Error("Spectastiq worker pool was terminated");
+
+    for (const task of this.queue.splice(0)) {
+      task.reject(error);
     }
-    await Promise.all(initWorkers);
+
+    for (const worker of this.workers) {
+      worker.terminate();
+    }
+
+    this.workers = [];
+    this.idleWorkers = [];
+    this.initPromise = undefined;
   }
 }
+
+const sharedWorkerPool = new WorkerPool(numWorkers);
+
+export const acquireWorkerPool = () => sharedWorkerPool.acquire();
+//
+// async function initWorkers(state) {
+//   if (state.workers.length === 0) {
+//     const remoteScriptOrigin = cdnScriptOrigin();
+//     const wasmUrl = remoteScriptOrigin ? `${remoteScriptOrigin}/pkg/spectastiq_bg.wasm` : new URL("./pkg/spectastiq_bg.wasm", import.meta.url);
+//     const wasmLoader = fetch(wasmUrl);
+//     const initWorkers = [];
+//     for (let i = 0; i < numWorkers; i++) {
+//       const worker = new WorkerPromise(`fft-worker-${i}`, state);
+//       state.workers.push(worker);
+//     }
+//     const wasm = await (await wasmLoader).arrayBuffer();
+//     for (const worker of state.workers) {
+//       initWorkers.push(worker.init(wasm));
+//     }
+//     await Promise.all(initWorkers);
+//   }
+// }
 
 const normalizeAudioBuffer = (buffer) => {
   // Find the peak amplitude in the buffer
@@ -81,7 +208,7 @@ const getGainForRegion = (state, minZeroOne, maxZeroOne, minFreqZeroOne, maxFreq
   return globalMax / localMax;
 };
 
-export const initSpectrogram = async (fileBytes, previousState) => {
+export const initSpectrogram = async (fileBytes, previousState, displayTimeline) => {
   const state = {
     sharedFloatData: undefined,
     sharedOutputData: undefined,
@@ -98,9 +225,8 @@ export const initSpectrogram = async (fileBytes, previousState) => {
     colorMap: 4,
     cropAmountTop: 0,
     cropAmountBottom: 0,
-    workers: (previousState && previousState.workers) || [],
+    displayTimeline
   };
-  await initWorkers(state);
   // Normalise the audio to a peak of -3 dBFS
   const audioContext = (previousState && previousState.offlineAudioContext) || new OfflineAudioContext({
     length: 1024 * 1024,
@@ -108,10 +234,12 @@ export const initSpectrogram = async (fileBytes, previousState) => {
     sampleRate: 48000,
   });
   // TODO: Decode audio off main thread
-  console.log("file", fileBytes.byteLength);
-  const wavData = await audioContext.decodeAudioData(fileBytes).catch((e) => {
-    console.error(e);
-  });
+  if (fileBytes.byteLength === 0) {
+    return {
+      error: "Zero length audio"
+    };
+  }
+  const wavData = await audioContext.decodeAudioData(fileBytes);
   if (!wavData) {
     return {
       error: 'Could not decode audio data',
@@ -143,19 +271,12 @@ export const initSpectrogram = async (fileBytes, previousState) => {
     state.max = undefined;
   };
 
-  const terminateWorkers = (state) => {
-    for (const worker of state.workers) {
-      worker.terminate();
-    }
-  };
-
   return {
     renderRange: renderRange(state),
     renderToContext: renderToContext(state),
     audioFloatData,
     invalidateCanvasCaches,
     cyclePalette: () => cyclePalette(state),
-    terminateWorkers: () => terminateWorkers(state),
     persistentSpectrogramState: {workers: state.workers, offlineAudioContext: audioContext, ctxs: state.ctxs},
     getGainForRegion: (startZeroOne, endZeroOne, minFreq, maxFreq) => getGainForRegion(state, startZeroOne, endZeroOne, minFreq, maxFreq),
   };
@@ -185,9 +306,10 @@ const cyclePalette = (state) => {
 
 const renderRange =
   (state) => async (startZeroOne, endZeroOne, renderWidth, force) => {
-
     // NOTE: Min width for renders, so that narrow viewports don't get overly blurry images when zoomed in.
-    renderWidth = Math.max(1920, renderWidth);
+    if (state.displayTimeline) {
+      renderWidth = Math.max(1920, renderWidth);
+    }
     if (startZeroOne === 0 && endZeroOne === 1) {
       if (state.imageDatas.length) {
         // We've already rendered the fully zoomed out version, no need to re-render
@@ -375,32 +497,46 @@ class WorkerPromise {
         {type: "module", credentials: "same-origin"}
       );
     }
+    this.work = new Map();
+    this.id = 0;
+
     this.worker.onmessage = ({data}) => {
-      if ((!window.SharedArrayBuffer) && data.output) {
-        // Copy outputs back to state.sharedOutputData in the correct offsets
-        this.output.subarray(data.offsets.outStart, data.offsets.outEnd).set(data.output, 0);
+      const pending = this.work.get(data.id);
+      if (!pending) {
+        return;
+      }
+
+      this.work.delete(data.id);
+
+      if (!window.SharedArrayBuffer && data.output && pending.output) {
+        pending.output
+          .subarray(data.offsets.outStart, data.offsets.outEnd)
+          .set(data.output, 0);
       }
       // Resolve;
-      this.work[data.id](data);
-      delete this.work[data.id];
+      pending.resolve(data);
     };
-    this.work = {};
-    this.id = 0;
+
+    this.worker.onerror = (event) => {
+      const error = event.error || new Error(event.message || "Spectastiq worker failed");
+
+      for (const pending of this.work.values()) {
+        pending.reject(error);
+      }
+      this.work.clear();
+    };
   }
 
   doWork(data, output) {
-    if (output) {
-      this.output = output;
-    }
-    return new Promise((resolve) => {
-      const jobId = this.id;
-      this.id++;
-      this.work[jobId] = resolve;
-      const message = {id: jobId, ...data};
+    return new Promise((resolve, reject) => {
+      const jobId = this.id++;
+      this.work.set(jobId, {resolve, reject, output});
+
       try {
-        this.worker.postMessage(message);
-      } catch (e) {
-        console.warn(e);
+        this.worker.postMessage({id: jobId, ...data});
+      } catch (error) {
+        this.work.delete(jobId);
+        reject(error);
       }
     });
   }
@@ -414,6 +550,11 @@ class WorkerPromise {
   }
 
   terminate() {
+    const error = new Error(`Worker ${this.name} was terminated`);
+    for (const pending of this.work.values()) {
+      pending.reject(error);
+    }
+    this.work.clear();
     this.worker.terminate();
   }
 }
@@ -471,7 +612,7 @@ async function renderArrayBuffer(
       work.output = state.sharedOutputData.subarray(outStart, outEnd);
     }
     job.push(
-      state.workers[chunk].doWork(work, state.sharedOutputData)
+      sharedWorkerPool.runJob(work, state.sharedOutputData)
     );
     chunk++;
     outStart += canvasChunkLength;
@@ -485,7 +626,7 @@ async function renderArrayBuffer(
 
   // FIXME - Only grab the maxes once, at startup? It's possible there are smaller sounds that aren't captured at that zoom
   //  level, and the max may need to be adjusted though.
-  await Promise.all(job);
+  await Promise.allSettled(job);
   if (state.firstRender) {
     // Work out the actual clipping
     state.firstRender = false;
