@@ -2619,25 +2619,152 @@ void main() {
 
   const FFT_WIDTH = 2048;
   const HEIGHT = FFT_WIDTH / 2; // Height needs to be at half the FFT width.
-  const numWorkers = (navigator.hardwareConcurrency || 2) - 1;
+  const numWorkers = Math.max(1, (navigator.hardwareConcurrency || 2) - 1);
 
-  async function initWorkers(state) {
-    if (state.workers.length === 0) {
+  class WorkerPool {
+    constructor(size) {
+      this.size = size;
+      this.workers = [];
+      this.queue = [];
+      this.idleWorkers = [];
+      this.initPromise = undefined;
+      this.referenceCount = 0;
+    }
+
+    acquire() {
+      this.referenceCount++;
+      this.init();
+
+      let released = false;
+      return () => {
+        if (released) {
+          return;
+        }
+
+        released = true;
+        this.release();
+      };
+    }
+
+    release() {
+      if (this.referenceCount === 0) {
+        console.warn("Spectastiq worker pool released without a matching acquire");
+        return;
+      }
+
+      this.referenceCount--;
+
+      if (this.referenceCount === 0) {
+        const initialization = this.initPromise || Promise.resolve();
+
+        initialization
+          .catch(() => {
+            // Initialization cleanup is handled by init().
+          })
+          .finally(() => {
+            // Another component may have acquired the pool while we waited.
+            if (this.referenceCount === 0) {
+              this.terminate();
+            }
+          });
+      }
+    }
+
+    init() {
+      if (this.initPromise) {
+        return this.initPromise;
+      }
+
+      this.initPromise = this.initialize().catch((error) => {
+        this.terminate();
+        this.initPromise = undefined;
+        throw error;
+      });
+
+      return this.initPromise;
+    }
+
+    async initialize() {
       const remoteScriptOrigin = cdnScriptOrigin();
-      const wasmUrl = remoteScriptOrigin ? `${remoteScriptOrigin}/pkg/spectastiq_bg.wasm` : new URL("./pkg/spectastiq_bg.wasm", (_documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === 'SCRIPT' && _documentCurrentScript.src || new URL('spectastiq.js', document.baseURI).href));
-      const wasmLoader = fetch(wasmUrl);
-      const initWorkers = [];
-      for (let i = 0; i < numWorkers; i++) {
-        const worker = new WorkerPromise(`fft-worker-${i}`, state);
-        state.workers.push(worker);
+      const wasmUrl = remoteScriptOrigin
+        ? `${remoteScriptOrigin}/pkg/spectastiq_bg.wasm`
+        : new URL("./pkg/spectastiq_bg.wasm", (_documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === 'SCRIPT' && _documentCurrentScript.src || new URL('spectastiq.js', document.baseURI).href));
+      const wasm = await (await fetch(wasmUrl)).arrayBuffer();
+
+      this.workers = Array.from(
+        {length: this.size},
+        (_, index) => new WorkerPromise(`fft-worker-${index}`)
+      );
+      await Promise.all(this.workers.map((worker) => worker.init(wasm)));
+      this.idleWorkers.push(...this.workers);
+      this.pump();
+    }
+
+    async runJob(job, output) {
+      await this.init();
+
+      return new Promise((resolve, reject) => {
+        this.queue.push({job, output, resolve, reject});
+        this.pump();
+      });
+    }
+
+    pump() {
+      while (this.idleWorkers.length > 0 && this.queue.length > 0) {
+        const worker = this.idleWorkers.pop();
+        const task = this.queue.shift();
+
+        worker
+          .doWork(task.job, task.output)
+          .then(task.resolve, task.reject)
+          .finally(() => {
+            // The pool may have been terminated while this task was running.
+            if (this.workers.includes(worker)) {
+              this.idleWorkers.push(worker);
+              this.pump();
+            }
+          });
       }
-      const wasm = await (await wasmLoader).arrayBuffer();
-      for (const worker of state.workers) {
-        initWorkers.push(worker.init(wasm));
+    }
+
+    terminate() {
+      const error = new Error("Spectastiq worker pool was terminated");
+
+      for (const task of this.queue.splice(0)) {
+        task.reject(error);
       }
-      await Promise.all(initWorkers);
+
+      for (const worker of this.workers) {
+        worker.terminate();
+      }
+
+      this.workers = [];
+      this.idleWorkers = [];
+      this.initPromise = undefined;
     }
   }
+
+  const sharedWorkerPool = new WorkerPool(numWorkers);
+
+  const acquireWorkerPool = () => sharedWorkerPool.acquire();
+  //
+  // async function initWorkers(state) {
+  //   if (state.workers.length === 0) {
+  //     const remoteScriptOrigin = cdnScriptOrigin();
+  //     const wasmUrl = remoteScriptOrigin ? `${remoteScriptOrigin}/pkg/spectastiq_bg.wasm` : new URL("./pkg/spectastiq_bg.wasm", import.meta.url);
+  //     const wasmLoader = fetch(wasmUrl);
+  //     const initWorkers = [];
+  //     for (let i = 0; i < numWorkers; i++) {
+  //       const worker = new WorkerPromise(`fft-worker-${i}`, state);
+  //       state.workers.push(worker);
+  //     }
+  //     const wasm = await (await wasmLoader).arrayBuffer();
+  //     for (const worker of state.workers) {
+  //       initWorkers.push(worker.init(wasm));
+  //     }
+  //     await Promise.all(initWorkers);
+  //   }
+  // }
 
   const normalizeAudioBuffer = (buffer) => {
     // Find the peak amplitude in the buffer
@@ -2696,7 +2823,7 @@ void main() {
     return globalMax / localMax;
   };
 
-  const initSpectrogram = async (fileBytes, previousState) => {
+  const initSpectrogram = async (fileBytes, previousState, displayTimeline) => {
     const state = {
       sharedFloatData: undefined,
       sharedOutputData: undefined,
@@ -2713,9 +2840,8 @@ void main() {
       colorMap: 4,
       cropAmountTop: 0,
       cropAmountBottom: 0,
-      workers: (previousState && previousState.workers) || [],
+      displayTimeline
     };
-    await initWorkers(state);
     // Normalise the audio to a peak of -3 dBFS
     const audioContext = (previousState && previousState.offlineAudioContext) || new OfflineAudioContext({
       length: 1024 * 1024,
@@ -2723,9 +2849,12 @@ void main() {
       sampleRate: 48000,
     });
     // TODO: Decode audio off main thread
-    const wavData = await audioContext.decodeAudioData(fileBytes).catch((e) => {
-      console.error(e);
-    });
+    if (fileBytes.byteLength === 0) {
+      return {
+        error: "Zero length audio"
+      };
+    }
+    const wavData = await audioContext.decodeAudioData(fileBytes);
     if (!wavData) {
       return {
         error: 'Could not decode audio data',
@@ -2757,19 +2886,12 @@ void main() {
       state.max = undefined;
     };
 
-    const terminateWorkers = (state) => {
-      for (const worker of state.workers) {
-        worker.terminate();
-      }
-    };
-
     return {
       renderRange: renderRange(state),
       renderToContext: renderToContext(state),
       audioFloatData,
       invalidateCanvasCaches,
       cyclePalette: () => cyclePalette(state),
-      terminateWorkers: () => terminateWorkers(state),
       persistentSpectrogramState: {workers: state.workers, offlineAudioContext: audioContext, ctxs: state.ctxs},
       getGainForRegion: (startZeroOne, endZeroOne, minFreq, maxFreq) => getGainForRegion(state, startZeroOne, endZeroOne, minFreq, maxFreq),
     };
@@ -2799,9 +2921,10 @@ void main() {
 
   const renderRange =
     (state) => async (startZeroOne, endZeroOne, renderWidth, force) => {
-
       // NOTE: Min width for renders, so that narrow viewports don't get overly blurry images when zoomed in.
-      renderWidth = Math.max(1920, renderWidth);
+      if (state.displayTimeline) {
+        renderWidth = Math.max(1920, renderWidth);
+      }
       if (startZeroOne === 0 && endZeroOne === 1) {
         if (state.imageDatas.length) {
           // We've already rendered the fully zoomed out version, no need to re-render
@@ -2976,32 +3099,46 @@ void main() {
           {type: "module", credentials: "same-origin"}
         );
       }
+      this.work = new Map();
+      this.id = 0;
+
       this.worker.onmessage = ({data}) => {
-        if ((!window.SharedArrayBuffer) && data.output) {
-          // Copy outputs back to state.sharedOutputData in the correct offsets
-          this.output.subarray(data.offsets.outStart, data.offsets.outEnd).set(data.output, 0);
+        const pending = this.work.get(data.id);
+        if (!pending) {
+          return;
+        }
+
+        this.work.delete(data.id);
+
+        if (!window.SharedArrayBuffer && data.output && pending.output) {
+          pending.output
+            .subarray(data.offsets.outStart, data.offsets.outEnd)
+            .set(data.output, 0);
         }
         // Resolve;
-        this.work[data.id](data);
-        delete this.work[data.id];
+        pending.resolve(data);
       };
-      this.work = {};
-      this.id = 0;
+
+      this.worker.onerror = (event) => {
+        const error = event.error || new Error(event.message || "Spectastiq worker failed");
+
+        for (const pending of this.work.values()) {
+          pending.reject(error);
+        }
+        this.work.clear();
+      };
     }
 
     doWork(data, output) {
-      if (output) {
-        this.output = output;
-      }
-      return new Promise((resolve) => {
-        const jobId = this.id;
-        this.id++;
-        this.work[jobId] = resolve;
-        const message = {id: jobId, ...data};
+      return new Promise((resolve, reject) => {
+        const jobId = this.id++;
+        this.work.set(jobId, {resolve, reject, output});
+
         try {
-          this.worker.postMessage(message);
-        } catch (e) {
-          console.warn(e);
+          this.worker.postMessage({id: jobId, ...data});
+        } catch (error) {
+          this.work.delete(jobId);
+          reject(error);
         }
       });
     }
@@ -3015,6 +3152,11 @@ void main() {
     }
 
     terminate() {
+      const error = new Error(`Worker ${this.name} was terminated`);
+      for (const pending of this.work.values()) {
+        pending.reject(error);
+      }
+      this.work.clear();
       this.worker.terminate();
     }
   }
@@ -3049,7 +3191,6 @@ void main() {
     const audioChunkLength = Math.ceil((endSample - startSample) / numChunks);
     const canvasChunkLength = canvasChunkWidth * (FFT_WIDTH / 2);
     const job = [];
-    let chunk = 0;
     let chunkStart = startSample;
     let outStart = 0;
     while (chunkStart < endSample) {
@@ -3072,9 +3213,8 @@ void main() {
         work.output = state.sharedOutputData.subarray(outStart, outEnd);
       }
       job.push(
-        state.workers[chunk].doWork(work, state.sharedOutputData)
+        sharedWorkerPool.runJob(work, state.sharedOutputData)
       );
-      chunk++;
       outStart += canvasChunkLength;
       chunkStart += audioChunkLength;
     }
@@ -3086,7 +3226,7 @@ void main() {
 
     // FIXME - Only grab the maxes once, at startup? It's possible there are smaller sounds that aren't captured at that zoom
     //  level, and the max may need to be adjusted though.
-    await Promise.all(job);
+    await Promise.allSettled(job);
     if (state.firstRender) {
       // Work out the actual clipping
       state.firstRender = false;
@@ -3169,25 +3309,37 @@ void main() {
     };
   }
 
-  const initAudioPlayer = (
-    root,
-    sharedState,
-    timelineState,
-    playerElements,
-  ) => {
+  const initAudioContext = (state) => {
     const audioContext = new AudioContext({sampleRate: 48000});
     const gainNode = audioContext.createGain();
     const filterNode = audioContext.createBiquadFilter();
     filterNode.type = "allpass";
     const volume = 1.0;
     setGain(gainNode, volume);
+    state.audioNodes = {
+      filterNode,
+      gainNode
+    };
+    state.audioContext = audioContext;
 
+    if (state.audioFloatData) {
+      state.audioDuration = state.audioFloatData.length / 48000;
+      const buffer = state.audioContext.createBuffer(1, state.audioFloatData.length, 48000);
+      buffer.copyToChannel(state.audioFloatData, 0);
+      state.audioBuffer = buffer;
+      state.audioFloatData = null;
+    }
+  };
+
+  const initAudioPlayer = (
+    root,
+    sharedState,
+    timelineState,
+    playerElements,
+  ) => {
     const state = {
-      audioNodes: {
-        gainNode,
-        filterNode,
-      },
-      audioContext,
+      audioNodes: null,
+      audioContext: null,
       audioProgressZeroOne: 0,
       playbackStartOffset: 0,
       progressSampleTime: 0,
@@ -3224,9 +3376,9 @@ void main() {
       setPlaybackOffset: (offsetZeroOne) =>
         setPlaybackTime(offsetZeroOne, state),
       setBandPass: (minFreq, maxFreq) =>
-        setBandPass(filterNode, minFreq, maxFreq),
-      removeBandPass: () => removeBandPass(filterNode),
-      setGain: (volume) => setGain(gainNode, volume),
+        setBandPass(state.audioNodes.filterNode, minFreq, maxFreq),
+      removeBandPass: () => removeBandPass(state.audioNodes && state.audioNodes.filterNode),
+      setGain: (volume) => setGain(state.audioNodes.gainNode, volume),
       pause: () => pauseAudio(state, timelineState, sharedState, playerElements),
       play: (startOffsetZeroOne, stopOffsetZeroOne) => playAudio(state, timelineState, sharedState, playerElements, startOffsetZeroOne, stopOffsetZeroOne),
       togglePlayback: () => togglePlayback(state, timelineState, sharedState, playerElements),
@@ -3238,8 +3390,10 @@ void main() {
   };
 
   const removeBandPass = (biQuadFilterNode) => {
-    // Does this really turn things off properly?
-    biQuadFilterNode.type = "allpass";
+    if (biQuadFilterNode) {
+      // Does this really turn things off properly?
+      biQuadFilterNode.type = "allpass";
+    }
   };
 
   const setBandPass = (biQuadFilterNode, minFreq, maxFreq) => {
@@ -3315,6 +3469,9 @@ void main() {
       )
     );
     cancelAnimationFrame(state.dragPlayheadRaf);
+    if (!state.audioContext) {
+      initAudioContext(state);
+    }
     if (state.audioContext.state !== "running") {
       // Update the playhead anyway.
       state.audioProgressZeroOne = thisOffsetXZeroOne;
@@ -3331,6 +3488,9 @@ void main() {
 
   const setPlaybackTime = async (offsetZeroOne, state) => {
     if (state.audioDuration) {
+      if (!state.audioContext) {
+        initAudioContext(state);
+      }
       if (state.audioContext.state !== "running") {
         await state.audioContext.resume();
       }
@@ -3340,11 +3500,8 @@ void main() {
     }
   };
 
-  const initAudio = (playerElements, audioFloatData, state) => {
-    state.audioDuration = audioFloatData.length / 48000;
-    const buffer = state.audioContext.createBuffer(1, audioFloatData.length, 48000);
-    buffer.copyToChannel(audioFloatData, 0);
-    state.audioBuffer = buffer;
+  const initAudio = (audioFloatData, state) => {
+    state.audioFloatData = audioFloatData;
   };
 
   const playAudio = async (state, timelineState, sharedState, playerElements, startAtOffsetZeroOne, stopAtOffsetZeroOne) => {
@@ -3355,7 +3512,9 @@ void main() {
     if (state.playing) {
       pauseAudio(state, timelineState, sharedState, playerElements);
     }
-
+    if (!state.audioContext) {
+      initAudioContext(state);
+    }
     if (state.audioContext.state !== "running") {
       if (navigator.audioSession) {
         // Try to work around issue where iOS won't play audio if phone is muted.
@@ -3431,6 +3590,9 @@ void main() {
     beganPlaying = false,
     rangeChange = false,
   ) => {
+    if (!state.audioContext) {
+      return;
+    }
     const {
       playheadCanvasCtx,
       mainPlayheadCanvasCtx,
@@ -3602,6 +3764,9 @@ void main() {
   };
 
   const togglePlayback = async (state, timelineState, sharedState, playerElements) => {
+    if (!state.audioContext) {
+      initAudioContext(state);
+    }
     if (!state.playing) {
       await playAudio(state, timelineState, sharedState, playerElements);
     } else {
@@ -3999,16 +4164,16 @@ void main() {
 <div id="container">
   <div id="spectrogram-container">
     <div id="canvas-container">
-      <canvas height="300" id="spectrogram-canvas"></canvas>
-      <canvas height="300" id="user-overlay-canvas"></canvas>
-      <canvas height="30" id="spectastiq-timescale-overlay-canvas"></canvas>        
-      <canvas height="300" id="spectastiq-overlay-canvas"></canvas>
-      <canvas height="300" id="main-playhead-canvas"></canvas>                
+      <canvas height="300" id="spectrogram-canvas" role="img" aria-label="spectrogram canvas"></canvas>
+      <canvas height="300" id="user-overlay-canvas" role="img" aria-label="user defined overlay elements"></canvas>
+      <canvas height="30" id="spectastiq-timescale-overlay-canvas" role="img" aria-label="timescale overlay ui"></canvas>        
+      <canvas height="300" id="spectastiq-overlay-canvas" role="img" aria-label="overlay canvas"></canvas>
+      <canvas height="300" id="main-playhead-canvas" role="img" aria-label="local playhead"></canvas>                
     </div>
     <div id="mini-map">
-      <canvas height="60" id="map-canvas"></canvas>     
-      <canvas height="60" id="playhead-canvas"></canvas>
-      <canvas height="60" id="timeline-ui-canvas"></canvas>         
+      <canvas height="60" id="map-canvas" role="img" aria-label="spectrogram overview"></canvas>     
+      <canvas height="60" id="playhead-canvas" role="img" aria-label="global playhead"></canvas>
+      <canvas height="60" id="timeline-ui-canvas" role="img" aria-label="timeline selection ui"></canvas>         
     </div>
     <progress id="progress-bar" max="100"></progress>
     <div class="lds-ring" id="loading-spinner">
@@ -4156,14 +4321,73 @@ void main() {
     }
 
     connectedCallback() {
-      this.init();
+      if (!this.releaseWorkerPool) {
+        this.releaseWorkerPool = acquireWorkerPool();
+      }
+      let delay = 0;
+      if (this.getAttribute("load-delay")) {
+        delay = Number(this.getAttribute("load-delay"));
+        if (isNaN(delay)) {
+          delay = 0;
+        }
+      }
+      if (delay) {
+        this.startupDelay = setTimeout(this.init.bind(this), delay);
+      } else {
+        this.init();
+      }
     }
 
     disconnectedCallback() {
-      this.terminateWorkers && this.terminateWorkers();
-      this.terminateWorkers = null;
-      this.pause();
+      this.disconnected = true;
+      if (this.startupDelay) {
+        clearTimeout(this.startupDelay);
+        delete this.startupDelay;
+      }
+      this.releaseWorkerPool?.();
+      this.releaseWorkerPool = undefined;
+      if (this.raf) {
+        cancelAnimationFrame(this.raf);
+        delete this.raf;
+      }
+      if (this.glContexts) {
+        for (const ctx of this.glContexts) {
+          const loseContextExt = ctx.getExtension('WEBGL_lose_context');
+          if (loseContextExt) {
+            loseContextExt.loseContext();
+          }
+        }
+        delete this.glContexts;
+      }
+      if (this.paletteChangeTimeout) {
+        clearTimeout(this.paletteChangeTimeout);
+        delete this.paletteChangeTimeout;
+      }
+      if (this.sharedState.interactionTimeout) {
+        clearTimeout(this.sharedState.interactionTimeout);
+        delete this.sharedState.interactionTimeout;
+      }
+      this.sharedState = { interacting: false, displayTimeline: false };
+
+      if (this.reader) {
+        this.reader.cancel().then(() => {
+          console.warn("reader cancelled");
+        });
+      }
+      if (this.resizeObserver) {
+        this.resizeObserver.disconnect();
+        delete this.resizeObserver;
+      }
+      if (this.intersectionObserver) {
+        this.intersectionObserver.disconnect();
+        delete this.intersectionObserver;
+      }
+
+      this.pause?.();
       this.unload();
+      for (const child of this.shadowRoot.children) {
+        this.shadowRoot.removeChild(child);
+      }
     }
 
     get src() {
@@ -4255,8 +4479,14 @@ void main() {
       const {drawTimelineUI, timelineState, setInitialZoom} = this.timeline;
       const {audioState, updatePlayhead} = this.audioPlayer;
       const canvas = this.timelineElements.canvas;
-      const mapCtx = this.timelineElements.mapCanvas.getContext("webgl2");
+      let mapCtx;
+      this.glContexts = [];
+      if (this.sharedState.displayTimeline) {
+        mapCtx = this.timelineElements.mapCanvas.getContext("webgl2");
+        this.glContexts.push(mapCtx);
+      }
       const ctx = canvas.getContext("webgl2");
+      this.glContexts.push(ctx);
       const timescaleOverlayContext =
         this.timelineElements.timescaleCanvas.getContext("2d");
       const userOverlayCtx =
@@ -4286,7 +4516,8 @@ void main() {
             this.abortController.abort("User aborted");
           }
           this.abortController = new AbortController();
-          this.abortController.signal.addEventListener("onabort", () => {
+          this.abortController.signal.addEventListener("abort", () => {
+            console.warn("Request aborted");
             this.requestAborted = true;
           });
           const requestInfo = {
@@ -4298,9 +4529,13 @@ void main() {
               ...headers,
             },
           };
+          if (this.reader) ;
           let downloadAudioResponse;
           try {
             downloadAudioResponse = await fetch(src, requestInfo);
+            if (this.disconnected) {
+              return;
+            }
             if (!downloadAudioResponse.ok) {
               this.showErrorMessage(`Audio file not found <pre>${src}</pre>`);
             } else {
@@ -4316,7 +4551,12 @@ void main() {
                 );
                 this.inited = true;
               }
-              const reader = downloadAudioResponse.body.getReader();
+              this.reader = downloadAudioResponse.body.getReader();
+              if (downloadAudioResponse.headers.get("Content-Type") === 'text/html') {
+                this.showErrorMessage(`Invalid file for <pre>${this.localSrc || src}</pre>`);
+                return;
+              }
+
               let expectedLength = parseInt(
                 downloadAudioResponse.headers.get("Content-Length"),
                 10
@@ -4335,7 +4575,9 @@ void main() {
                 }
               }
               while (!this.requestAborted) {
-                const {done, value} = await reader.read();
+                const {done, value} = await this.reader.read().catch(e => {
+                  console.warn("Read failed", e);
+                });
                 if (done) {
                   break;
                 }
@@ -4350,17 +4592,25 @@ void main() {
                     }
                   }
                 }
+                if (this.requestAborted) {
+                  // console.log("Break;");
+                }
               }
-              const fileBytesReceived = new Uint8Array(receivedLength);
+              delete this.reader;
+              let fileBytesReceived = new Uint8Array(receivedLength);
               let position = 0;
               for (const chunk of chunks) {
                 fileBytesReceived.set(chunk, position);
                 position += chunk.length;
               }
               fileBytes = fileBytesReceived.buffer;
+              if (this.disconnected) {
+                return;
+              }
               const spectrogramInited = await initSpectrogram(
                 fileBytes,
-                this.persistentSpectrogramState || null
+                this.persistentSpectrogramState || null,
+                this.sharedState.displayTimeline
               );
               if (spectrogramInited.error) {
                 this.showErrorMessage(`${spectrogramInited.error} for <pre>${this.localSrc || src}</pre>`);
@@ -4370,7 +4620,6 @@ void main() {
                   renderToContext,
                   audioFloatData,
                   invalidateCanvasCaches,
-                  terminateWorkers,
                   cyclePalette,
                   getGainForRegion,
                   persistentSpectrogramState,
@@ -4400,7 +4649,6 @@ void main() {
                 audioState.playheadWasInRangeWhenPlaybackStarted = false;
 
                 this.persistentSpectrogramState = persistentSpectrogramState;
-                this.terminateWorkers = terminateWorkers;
                 this.invalidateCanvasCaches = invalidateCanvasCaches;
                 this.renderRange = renderRange;
 
@@ -4419,13 +4667,17 @@ void main() {
                   );
                   palette = defaultPalette;
                 }
-                let paletteChangeTimeout;
                 this.nextPalette = () => {
                   this.clearOverlay();
                   const nextPalette = cyclePalette();
                   // Give downstream renderers a moment to adjust to palette changes;
-                  clearTimeout(paletteChangeTimeout);
-                  paletteChangeTimeout = setTimeout(() => {
+                  if (this.paletteChangeTimeout) {
+                    clearTimeout(this.paletteChangeTimeout);
+                  }
+                  this.paletteChangeTimeout = setTimeout(() => {
+                    if (this.disconnected) {
+                      return;
+                    }
                     timelineState.isDarkTheme = nextPalette !== "Grey";
                     const startZeroOne = timelineState.left;
                     const endZeroOne = timelineState.right;
@@ -4678,6 +4930,9 @@ void main() {
                     this.raf = undefined;
                   }
                   this.raf = requestAnimationFrame(() => {
+                    if (this.disconnected) {
+                      return;
+                    }
                     const startZeroOne = timelineState.left;
                     const endZeroOne = timelineState.right;
                     const top = timelineState.top;
@@ -4726,6 +4981,9 @@ void main() {
                     // Render the stretched version
                     renderToContext(ctx, startZeroOne, endZeroOne, top, bottom).then(
                       (s) => {
+                        if (this.disconnected) {
+                          return;
+                        }
                         if (!!s) {
                           this.shadowRoot.dispatchEvent(
                             new CustomEvent("render", {
@@ -4746,19 +5004,34 @@ void main() {
                         }
                       }
                     );
-                    if (initialRender) {
+                    if (initialRender && this.sharedState.displayTimeline) {
                       renderToContext(mapCtx, 0, 1, 1, 0);
                     }
                     if (!this.sharedState.interacting || initialRender) {
                       // Render the fine detail of the zoom level and then fill it in when available.
                       renderRange(startZeroOne, endZeroOne, canvas.width, force).then(
                         (rangeCropInfo) => {
+                          if (this.disconnected) {
+                            return;
+                          }
                           if (rangeCropInfo && rangeCropInfo.cropAmountTop) {
                             cropAmountTop = rangeCropInfo.cropAmountTop;
                             this.actualSampleRate = rangeCropInfo.actualSampleRate;
                           }
-                          if (initialRender) {
-                            renderToContext(mapCtx, 0, 1, 1, 0).then(() => {
+                          if (initialRender && this.sharedState.displayTimeline) {
+                            renderToContext(mapCtx, 0, 1, 1, 0);
+                          }
+                          renderToContext(
+                            ctx,
+                            timelineState.left,
+                            timelineState.right,
+                            top,
+                            bottom
+                          ).then((s) => {
+                            if (this.disconnected) {
+                              return;
+                            }
+                            if (initialRender) {
                               if (
                                 this.loadingSpinner &&
                                 this.loadingSpinner.parentElement
@@ -4782,15 +5055,8 @@ void main() {
                                 );
                                 this.endLoad();
                               }
-                            });
-                          }
-                          renderToContext(
-                            ctx,
-                            timelineState.left,
-                            timelineState.right,
-                            top,
-                            bottom
-                          ).then((s) => {
+                            }
+
                             if (
                               initialRender &&
                               startTimeOffset !== 0 &&
@@ -4826,6 +5092,8 @@ void main() {
                                 })
                               );
                             }
+                          }).catch((e) => {
+                            console.log("Render failed?", this.src);
                           });
                         }
                       );
@@ -4833,7 +5101,6 @@ void main() {
                   });
                 };
                 initAudio(
-                  this.playerElements,
                   audioFloatData,
                   audioState
                 );
@@ -5015,6 +5282,8 @@ void main() {
           label.setAttribute("for", button.id);
           label.classList.add("radio-custom-label");
           const icon = document.createElement("canvas");
+          icon.setAttribute("role", "img");
+          icon.setAttribute("aria-label", "palette icon");
           icon.width = 16 * devicePixelRatio;
           icon.height = 16 * devicePixelRatio;
           label.appendChild(icon);
@@ -5357,6 +5626,9 @@ void main() {
       this.selectRegionOfInterest = async (start, end, min, max) => {
         {
           const centerX = start + (end - start) * 0.5;
+          if (!audioState.audioContext) {
+            initAudioContext(audioState);
+          }
           if (audioState.audioContext.state !== "running") {
             if (navigator.audioSession) {
               // Try to work around issue where iOS won't play audio if phone is muted.
@@ -5520,6 +5792,9 @@ void main() {
           clearTimeout(this.sharedState.interactionTimeout);
           this.timelineElements.container.classList.add("disabled");
           this.sharedState.interactionTimeout = setTimeout(() => {
+            if (this.disconnected) {
+              return;
+            }
             // TODO: We only want to invalidate the caches if the *backing* size of the spectrogram has changed,
             //  and it needed to be re-rendered.  Otherwise just draw what we have again with no delay.
             //  Worth noting though that our webgl canvases *do* need to be resized at some point, and at that point
@@ -5528,6 +5803,9 @@ void main() {
               this.invalidateCanvasCaches && this.invalidateCanvasCaches();
               this.renderRange &&
               this.renderRange(0, 1, canvas.width, true).then(() => {
+                if (this.disconnected) {
+                  return;
+                }
                 this.render({detail: {initialRender: true, force: true}});
               });
             } else {
@@ -5537,23 +5815,23 @@ void main() {
           }, 300);
         }
       };
-      const resizeObserver = new ResizeObserver((entries) => {
+      this.resizeObserver = new ResizeObserver((entries) => {
         // We'll defer resizing the spectrogram backing canvas until a new spectrogram has been created at the new
         // width and is ready to render.
         this.resizeCanvases(entries[0].contentRect.width, false);
       });
-      resizeObserver.observe(container);
+      this.resizeObserver.observe(container);
       if (lazyLoad) {
-        const intersectionObserver = new IntersectionObserver((intersection) => {
+        this.intersectionObserver = new IntersectionObserver((intersection) => {
           if (intersection[0].isIntersecting && src && src !== "null" && src !== "undefined") {
             this.loadSrc(src);
-            intersectionObserver.disconnect();
+            this.intersectionObserver.disconnect();
           }
         }, {
           rootMargin: '50px',
           threshold: 0.1
         });
-        intersectionObserver.observe(container);
+        this.intersectionObserver.observe(container);
       } else {
         // Initial attributeChangedCallback happens before connectedCallback, so need to load src after initial one-time setup.
         if (src && src !== "null" && src !== "undefined") {
